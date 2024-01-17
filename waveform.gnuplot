@@ -1,4 +1,4 @@
-set terminal png size 5000,500;
+set terminal png size 2500,250;
 
 set output 'waveform.png';
 unset key;

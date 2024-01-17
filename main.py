@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-
 """
 Created on Tue Sep 26 14:22:29 2023
 
-@author: ffx
+@author: fdiode
 """
 
 
-import os
-import sys
+import os,sys
 import time
 import math
 from datetime import datetime
@@ -22,12 +20,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import scipy.stats
 
-# loading gc
-import gc
-
-
 import discogs_client
-# from discogs_client.exceptions import HTTPError
 
 from pytube import YouTube 
 from fuzzywuzzy import fuzz
@@ -41,62 +34,75 @@ import librosa.display
 import keyfinder
 from pylatexenc.latexencode import unicode_to_latex
 
-# animated_qrcode.py
-
 import segno
-from urllib.request import urlopen
 
 
-script_directory = os.path.dirname(os.path.abspath(sys.argv[0]))
-databaseDIR = os.path.dirname(os.path.abspath(sys.argv[0])) + '/' + 'database'
 
 """ 
-was gibts zu tun?
-
-Alles hier zusammen führen
-- latex zusammenführen, anordnung der sticker für jede seite passend machen (digitale tabelle anlegen mit ID's welche gedruckt wurden und abspeichern(!)')
-- tabelle einlesen was gedruckt wurde um diese zu skippen
-- record for record von discogs - zum ermöglichen von parallel processing
-- check if video bereits da
-- check if analyze bereits da / waveform / bpm / key
-- unterscheidung bei videosuche für edits (!macht probleme, manchmal wird ein video zwei tracks zugeordnet, erfordert bessere unterscheidung)
-- lesen von timestamp und filtern in record library
-- eingabe von optionen zum starten aus terminal
-- grafische oberfläche
-- optionales lesen einer digitalen bibliothek, falls z.B. bandcamp alben auch abgelegt sind
-- design des latex exports
-- erstellen von stickern anhand von spezifischen IDs (anstelle der timestamp funktion)
-- wahl des ordners der library von discogs (oder alle falls möglich als option?)
-- genre auf label mitaufdrucken? oder evtl. noch rating?
-- variablen reduzieren (KISS!) -- speicher freigeben (RAM bedarf reduzieren)
-- routine einbauen, welche position NaN und leere Titel erkennt, bei einer platte ist auch unter pos leere tracks!!!
+what is to do?
+- parallelisation (record for record)
+- adjust latex output
+- routine for creating stickers of only new records in database or filter by timestamp
+- check for local files (e.g. bandcamp digital tracks for analysation instead youtube)
+- sticker for specific id
+- debugging
+- discogs folder selection 
 """
+
+def main():
+    
+    databaseDIR = os.path.dirname(os.path.abspath(sys.argv[0])) + '/' + 'DiscogsDatabase'
+    
+
+    print("starting discogs script\n")
+    # reading token from local file:
+    f = open(os.path.expanduser('~') + '/.config/discogs_token', "r")
+    discogs_token=f.read().strip()
+    f.close()
+
+
+    # connectiong to discogs:
+    d = discogs_client.Client('DiscogsRecordLabeler/0.1', user_token=discogs_token)
+    me = d.identity()
+        
+    # Folder selection:
+    # collection = me.collection_folders[folderSelection].releases
+    collection = me.collection_folders[5].releases
+    
+    
+    
+    """ MAIN loop thru discogs collection:"""
+    for i in range(len(collection)):
+    # for i in range(0,20):
+        print("processing id: " + str(collection[i].data['id']) + '  --  ' + collection[i].release.title)
+        # print(unicode_to_latex(collection[i].release.title))
+        timestampRecordAdded = convert_to_datetime(collection[i].data['date_added'])
+        
+        print("retrieving metadata from discogs")
+        crawlReleaseData(collection[i].release,timestampRecordAdded, databaseDIR)
+        
+        print("downloading videos from youtube:")
+        downloadYoutube(collection[i].release, databaseDIR)
+        
+        # print("analyze videos:")
+        analyzeDownloadedVideos(collection[i].release, databaseDIR)
+        
+        # print("create qr codes:")
+        createQRCode(collection[i].releaslatexPreamble, databaseDIR)
+        
+        # print("creating latex label file for record:")
+        createLatexLabelFile(collection[i].release, databaseDIR)
+         
+    exportDIR = os.path.dirname(os.path.abspath(sys.argv[0])) + '/' + 'export'
+    combineLatex(databaseDIR, exportDIR)
+
+
+
 
 def convert_to_datetime(datetime_string):
     tz_offset = datetime.strptime(datetime_string[-5:], "%H:%M")
     return datetime.strptime(datetime_string[:-6], '%Y-%m-%dT%H:%M:%S') + timedelta(hours=tz_offset.hour)
-        
 
-print("starting discogs script\n")
-# reading token from local file:
-f = open(os.path.expanduser('~') + '/.config/discogs_token', "r")
-discogs_token=f.read().strip()
-f.close()
-
-
-# connectiong to discogs:
-d = discogs_client.Client('DiscogsRecordLabeler/0.1', user_token=discogs_token)
-me = d.identity()
-
-# user input for selecting the discogs folder to analyze:    
-# for i in range(len(me.collection_folders)):
-    # print(str(i+1) + '  -  ' + me.collection_folders[i].data['name'])
-# folderSelection = int(input("select discogs folder to analyze:")) - 1
-
-
-# request library from discogs:
-# collection = me.collection_folders[folderSelection].releases
-collection = me.collection_folders[5].releases
 
 def crawlReleaseData(collectionElement,timestampOfRecord, databaseDIR):
     
@@ -156,11 +162,15 @@ def crawlReleaseData(collectionElement,timestampOfRecord, databaseDIR):
             pass
     return
 
+
+
 def video_info(yt):
     ytTitle = yt.title
     ytLength = int(yt.length)
     ytArtist = yt.author
     return ytTitle, ytLength, ytArtist
+
+
 
 def retrieveYoutubeMetadata(videos):
     # request, process and return metadata of youtube videos
@@ -183,8 +193,11 @@ def retrieveYoutubeMetadata(videos):
     return np.column_stack((videos,videoTitles,videoArtists,videoLengths))
 
 
+
 def duplicates(arr):
     return [elem in arr[:i] for i, elem in enumerate(arr)]
+
+
 
 
 def matchVideosWithTracklist(tracklist,metadata,databaseDIR):
@@ -266,6 +279,8 @@ def matchVideosWithTracklist(tracklist,metadata,databaseDIR):
     return
 
 
+
+
 def downloadYoutube(collectionElement, databaseDIR):
     elementID = str(collectionElement.id)
     if os.path.exists(databaseDIR + '/' + elementID):
@@ -277,6 +292,7 @@ def downloadYoutube(collectionElement, databaseDIR):
     else:
         pass
     return
+
 
 
 
@@ -292,12 +308,13 @@ def analyzeDownloadedVideos(collectionElement, databaseDIR):
     
     
     recordPath = databaseDIR + '/' + str(collectionElement.id)
+    
     #get downloaded youtube videos on local disk:
     files = [file for file in os.listdir(recordPath) if file.endswith(".m4a")]
     
     # options:
-    waveformGen= True
-    keyAndBpmCHeck = True
+    waveformGen= False
+    keyAndBpmCHeck = False
     sampleRate = 44100
     # sampleRate = 22050
     
@@ -308,8 +325,6 @@ def analyzeDownloadedVideos(collectionElement, databaseDIR):
             # set ffmpeg command:
             ffmpeg_command = ["ffmpeg", "-i", recordPath + '/' + file,
                             "-ac", "1", "-filter:a", "aresample="+str(sampleRate), "-map", "0:a", "-c:a", "pcm_s16le", "-f", "data", '-']
-            # ffmpeg_command = ["ffmpeg", "-i", recordPath + '/' + file,
-                            # "-ac", "1", "-filter:a", "-map", "0:a", "-c:a", "pcm_s16le", "-f", "data", '-']
             # run ffmpeg command pipe:
             ffmpeg_pipe = subprocess.Popen(ffmpeg_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)            
             """ generate waveform: """
@@ -327,6 +342,9 @@ def analyzeDownloadedVideos(collectionElement, databaseDIR):
                         shutil.move("waveform.png", recordPath +'/'+ file[:-4]+ "_waveform.png")
                     else:
                         pass
+                    
+                    plot.kill()
+                    
                 else:
                     pass
             else:
@@ -394,12 +412,13 @@ def analyzeDownloadedVideos(collectionElement, databaseDIR):
                 # ax.legend()
                 # plt.show()
                 # plt.close()
+                
             if 'ffmpeg_pipe' in locals():
-                del ffmpeg_pipe
+                ffmpeg_pipe.kill()
             else:
                 pass
         else:
-            # print("wurde bereits analysiert")
+            # print("already analyzed")
             pass
                 
     results = pd.DataFrame(results, columns = ['pos', 'bpm', 'key']) 
@@ -408,6 +427,7 @@ def analyzeDownloadedVideos(collectionElement, databaseDIR):
     results.to_csv(recordPath + '/' + 'analyzed.csv', index=False)
     
     return
+
 
 
 def createQRCode(collectionElement, databaseDIR):
@@ -423,10 +443,13 @@ def createQRCode(collectionElement, databaseDIR):
                 scale=10
             )
         else:
-            pass # qr code existiert
+            pass # qr code existing
     else:
-        pass # kein cover (hier vlt. dann ein qr code anlegen ohne cover?)
+        pass # no cover available
     return
+
+
+
 
 def inplace_change(filename, old_string, new_string):
     # Safely read the input filename using 'with'
@@ -442,6 +465,9 @@ def inplace_change(filename, old_string, new_string):
         s = s.replace(old_string, new_string)
         f.write(s)
     return
+
+
+
 
 def createLatexLabelFile(collectionElement, databaseDIR):
     recordPath = databaseDIR + '/' + str(collectionElement.id)
@@ -520,37 +546,6 @@ def createLatexLabelFile(collectionElement, databaseDIR):
     return
 
 
-# for i in range(len(collection)):
-for i in range(0,20):
-    print("processing id: " + str(collection[i].data['id']) + '  --  ' + collection[i].release.title)
-    # print(unicode_to_latex(collection[i].release.title))
-    timestampRecordAdded = convert_to_datetime(collection[i].data['date_added'])
-    
-    print("retrieving metadata from discogs")
-    crawlReleaseData(collection[i].release,timestampRecordAdded, databaseDIR)
-    
-    print("downloading videos from youtube:")
-    downloadYoutube(collection[i].release, databaseDIR)
-    
-    print("analyze videos:")
-    analyzeDownloadedVideos(collection[i].release, databaseDIR)
-    
-    print("create qr codes:")
-    createQRCode(collection[i].release, databaseDIR)
-    
-    print("creating latex label file for record:")
-    createLatexLabelFile(collection[i].release, databaseDIR)
-    print()
-     
-    # get the current collection 
-    # thresholds as a tuple
-    print("Garbage collection thresholds:",
-                        gc.get_threshold())
-    collected = gc.collect()
-    print("Garbage collector: collected",
-          "%d objects." % collected)
-    print()
-
     
     
 def combineLatex(databaseDIR, exportDIR):
@@ -558,12 +553,12 @@ def combineLatex(databaseDIR, exportDIR):
     stickersToPrint = len(records)
     stickersToPrint = 15
     pagesToPrint = math.ceil(stickersToPrint / 10)
-    
+    script_directory = os.path.dirname(os.path.abspath(sys.argv[0]))
     with open(exportDIR + '/' + 'output.tex', 'w') as f:
-        latexPreamble = open(script_directory + '/' + 'functions' + '/' +'latexPreamble.tex', 'r')
-        for line in latexPreamble:
+        latexTemplate = open(script_directory + '/' + 'functions' + '/' +'latexTemplate.tex', 'r')
+        for line in latexTemplate:
             f.write(line)
-        latexPreamble.close()
+        latexTemplate.close()
         
         release = 0
         x,y,p = 0,0,0
@@ -589,8 +584,6 @@ def combineLatex(databaseDIR, exportDIR):
      };\n")                    
                     #text:
                     f.write("\t\\node[right,align=left] at ("+str(xPos) + " in, " + str(yPos+1) + " in){\n\t\t\t")
-                    # f.write("release: " + str(release))
-                    # f.write("\t\\input{../database/22233/label.tex}\n \t \t \t")
                     f.write("\t\\input{../database/" + str(records[release-1]) + "/label.tex}\n \t \t \t")
                     f.write("};\n")
 
@@ -601,5 +594,9 @@ def combineLatex(databaseDIR, exportDIR):
     
     return
 
-exportDIR = script_directory + '/' + 'export'
-test = combineLatex(databaseDIR, exportDIR)
+
+
+
+if __name__ == "__main__":
+    main()
+    
