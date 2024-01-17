@@ -14,7 +14,7 @@ The script utilizes various Python modules for tasks such as:
 
 ## Subprocesses
 
-The following subprocesses are employed and need to be available via $PATH variable:
+The following subprocesses are employed and need to be available via $PATH variable (all of them is free and opensource software <3 ):
 
 - `pdfLaTeX`
 - `ffmpeg`
