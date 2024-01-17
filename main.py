@@ -88,7 +88,7 @@ def main():
         analyzeDownloadedVideos(collection[i].release, databaseDIR)
         
         # print("create qr codes:")
-        createQRCode(collection[i].releaslatexPreamble, databaseDIR)
+        createQRCode(collection[i].release, databaseDIR)
         
         # print("creating latex label file for record:")
         createLatexLabelFile(collection[i].release, databaseDIR)
