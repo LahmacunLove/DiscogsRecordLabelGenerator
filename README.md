@@ -1,5 +1,5 @@
 # DiscogsRecordLabeler
-python script for crawling your discogs library and generating printable 8163 shipping labels for your printer@home.
+python script for crawling your discogs library via API and discogs_client module for python - generating printable 8163 shipping labels for your printer@home.
 
 Uses multiple python modules for downloading the matching youtube videos, music analysation, bpm and key analysation. 
 
