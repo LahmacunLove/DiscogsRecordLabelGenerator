@@ -33,8 +33,7 @@ Im also working on some routines to prevent analyzing and downloading already ex
 
 - clone the repository
 - create token for your profile on discogs (somewhere in your profile settings)
-- paste token in `$HOME/.config/discogs_token`
-- run main.py via python 3 interpreter
-- probably you have to install some missing pythonpackages, preferably with pip.
+- paste token in `$HOME/.config/discogs_token` or adjust to your own needs
+- run main.py via python3 interpreter (probably you have to install some missing pythonpackages, preferably with pip)
 
 ![image](https://github.com/LahmacunLove/DiscogsRecordLabeler/blob/master/output.jpg)
