@@ -6,3 +6,6 @@ Uses multiple python modules for downloading the matching youtube videos, music 
 - pdfLaTeX, ffmpeg and gnuplot are used as subprocesses
 - works on linux, not tested on other platforms, should be easy to get running on any Unix system
 - some adjustment needed for the pdf output, still some formatting problems there
+
+
+![image](https://github.com/LahmacunLove/DiscogsRecordLabeler/blob/master/output.jpg)
