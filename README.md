@@ -1,4 +1,4 @@
-# DiscogsRecordLabeler
+# DiscogsRecordLabelGenerator
 
 ## Overview
 
