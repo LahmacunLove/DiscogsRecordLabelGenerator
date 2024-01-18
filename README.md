@@ -2,7 +2,7 @@
 
 ## Overview
 
-This Python script is designed for crawling your Discogs library using the Discogs API and the discogs_client module for Python. It generates printable 8163 shipping labels for your home printer.
+This Python script is designed for crawling your Discogs library using the Discogs API and the discogs_client module for Python. It generates a multipaged pdf-file with 8163 shipping labels for your home printer.
 
 ## Features
 
