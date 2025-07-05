@@ -1,0 +1,117 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Apr 18 19:25:32 2025
+
+@author: ffx
+"""
+
+import time
+from pathlib import Path
+import discogs_client
+from config import load_config
+
+import json
+import shutil
+
+class DiscogsLibraryMirror:
+    def __init__(self):
+        self.config = load_config()
+        self.discogs = self._init_discogs_client()
+        self.library_path = Path(self.config["LIBRARY_PATH"]).expanduser()
+        self.username = None
+
+    def _init_discogs_client(self):
+        token = self.config.get("DISCOGS_USER_TOKEN")
+        if not token:
+            raise ValueError("Discogs-Token fehlt in der Konfig.")
+        return discogs_client.Client("DiscogsDBLabelGen/0.1", user_token=token)
+
+    def get_collection_release_ids(self):
+       user = self.discogs.identity()
+       self.username = user.username
+       folder = self.discogs.user(self.username).collection_folders[0]  # "All" Folder
+       release_ids = []
+       
+       print("Lade Collection...")
+       page = 1  # start page?
+       
+       while True:
+           releases = folder.releases.page(page)  # Holt Releases der aktuellen Seite
+           print(len(folder.releases.page(page)))
+           for release in releases:
+               release_ids.append(release.release.id)
+       
+           # Wenn die aktuelle Seite weniger als per_page Releases hat, könnten wir fertig sein
+           if len(releases) < 50: # hier später auf 50 ändern, für ganze lib
+               break
+       
+           page += 1
+           time.sleep(1)  # Zeit für Discogs API-Limit
+       
+       return release_ids
+
+    def get_local_release_ids(self):
+        if not self.library_path.exists():
+            return []
+        local_ids = []
+        for entry in self.library_path.iterdir():
+            if entry.is_dir() and "_" in entry.name:
+                try:
+                    local_ids.append(int(entry.name.split("_")[0]))
+                except ValueError:
+                    pass
+        return local_ids
+
+    def get_diff(self):
+        discogs_ids = set(self.get_collection_release_ids())
+        local_ids = set(self.get_local_release_ids())
+        new_ids = discogs_ids - local_ids
+        removed_ids = local_ids - discogs_ids
+        return new_ids, removed_ids
+
+    
+    def save_release_metadata(self, release_id, metadata):
+        """Speichert die kompletten Metadaten eines Releases in einem Ordner und einer JSON-Datei."""
+        
+        # Erstelle einen Ordner für das Release basierend auf der ID und ggf. einem Titel
+        # (kann auch mit der release_id als Name erfolgen)
+        release_folder = self.library_path / f"{release_id}_{metadata.get('title', release_id)}"
+        print(self.library_path)
+        print(release_folder)
+        release_folder.mkdir(parents=True, exist_ok=True)
+        
+        # Speichern der gesamten Metadaten als JSON-Datei
+        metadata_path = release_folder / "metadata.json"
+        print(metadata_path)
+        with open(metadata_path, "w", encoding="utf-8") as f:
+            json.dump(metadata, f, indent=4, ensure_ascii=False)
+    
+        print(f"Release {release_id} gespeichert.") 
+
+
+    def delete_release_folder(self, release_id):
+        """Löscht einen Ordner, der ein Release enthält, falls das Release nicht mehr existiert."""
+        release_folder = self.library_path / f"{release_id}"
+        if release_folder.exists() and release_folder.is_dir():
+            print(f"Lösche Release: {release_id}")
+            shutil.rmtree(release_folder)
+
+    def sync_releases(self):
+        """Vergleicht die Releases und speichert neue Releases oder löscht gelöschte Releases."""
+        # IDs von Discogs und lokalen Releases
+        discogs_ids = set(self.get_collection_release_ids())
+        local_ids = set(self.get_local_release_ids())
+
+        # Neue Releases speichern
+        new_ids = discogs_ids - local_ids
+        for release_id in new_ids:
+            print(f"Neues Release gefunden: {release_id}")
+            metadata = self.discogs.release(release_id).data  # Holt die Metadaten
+            self.save_release_metadata(release_id, metadata)
+
+        # Gelöschte Releases entfernen
+        removed_ids = local_ids - discogs_ids
+        for release_id in removed_ids:
+            print(f"Release entfernt: {release_id}")
+            self.delete_release_folder(release_id)
