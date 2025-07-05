@@ -14,12 +14,15 @@ Created on Fri Apr 18 19:25:32 2025
 @author: ffx
 """
 
+import os
 import time
 from pathlib import Path
 import discogs_client
 from config import load_config
 from datetime import datetime
 from datetime import timedelta
+import urllib.request
+
 
 import json
 import shutil
@@ -83,21 +86,13 @@ class DiscogsLibraryMirror:
     
     def save_release_metadata(self, release_id, metadata):
         """Speichert die kompletten Metadaten eines Releases in einem Ordner und einer JSON-Datei."""
-        
         # Erstelle einen Ordner für das Release basierend auf der ID und ggf. einem Titel
         # (kann auch mit der release_id als Name erfolgen)
         release_folder = self.library_path / f"{release_id}_{metadata.get('title', release_id)}"
-        # print(self.library_path)
-        # print("\n hier:")
-        # print(metadata)
-        # print(type(metadata))
-        # print("\n")
-        # print(release_folder)
         release_folder.mkdir(parents=True, exist_ok=True)
         
         # Speichern der gesamten Metadaten als JSON-Datei
         metadata_path = release_folder / "metadata.json"
-        print(metadata_path)
         with open(metadata_path, "w", encoding="utf-8") as f:
             json.dump(metadata, f, indent=4, ensure_ascii=False)
     
@@ -118,12 +113,10 @@ class DiscogsLibraryMirror:
             
     def sync_single_release(self, release_id):
         # Neue Releases speichern
-        # print(f"Neues Release gefunden: {release_id}")
         collectionElement = self.discogs.release(release_id)  # Holt die Metadaten hier stimmt was nicht
-        
         timestamp = self.discogs.user(self.username).collection_items(release_id)[0].data['date_added']
         
-        # # Metadaten sammeln
+        # Metadaten sammeln
         metaData = {
             "title": collectionElement.title,
             "artist": [r.name for r in collectionElement.artists],
@@ -150,7 +143,36 @@ class DiscogsLibraryMirror:
         metaData["tracklist"] = tracklist
         
         self.save_release_metadata(release_id, metaData)
+        self.saveCoverArt(release_id, metaData)
+        
+        return
+        
+        
+    def saveCoverArt(self, release_id, metaData):
+        elementDirectory = self.library_path / f"{release_id}_{metaData.get('title', release_id)}"
+        
+        try:
+            imageURL = self.discogs.release(release_id).images[0]['uri']
+        except:
+            imageURL = None
             
+        if imageURL !=  None:
+            try:
+                print("downloading Cover of " + str(release_id))
+                
+                # urllib.request.urlretrieve(imageURL, os.path.join(elementDirectory, "cover.jpg"))
+                urllib.request.urlr
+                req = urllib.request.Request(
+                    imageURL,
+                    headers={'User-Agent': 'Mozilla/5.0'}
+                )
+    
+                with urllib.request.urlopen(req) as response, \
+                    open(os.path.join(elementDirectory, "cover.jpg"), 'wb') as out_file:
+                    out_file.write(response.read())
+            except:
+                pass
+        return
             
             
             
@@ -164,10 +186,7 @@ class DiscogsLibraryMirror:
         new_ids = discogs_ids - local_ids
         for release_id in new_ids:
             print(f"Neues Release gefunden: {release_id}")
-            # metadata = self.discogs.release(release_id).data  # Holt die Metadaten hier stimmt was nicht
             self.sync_single_release(release_id)
-            # print(self.retrieve_metadata(self))
-            # self.save_release_metadata(release_id, metadata)
 
         # Gelöschte Releases entfernen
         removed_ids = local_ids - discogs_ids
