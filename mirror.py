@@ -6,14 +6,6 @@ Created on Sat Jul  5 22:44:08 2025
 @author: ffx
 """
 
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Fri Apr 18 19:25:32 2025
-
-@author: ffx
-"""
-
 import os
 import time
 from pathlib import Path
@@ -26,6 +18,7 @@ import urllib.request
 
 import json
 import shutil
+import re
 
 class DiscogsLibraryMirror:
     def __init__(self):
@@ -63,6 +56,12 @@ class DiscogsLibraryMirror:
            time.sleep(1)  # Zeit für Discogs API-Limit
        
        return release_ids
+   
+    def clean_string_for_filename(self, name, replace_with="_"):
+        # Remove anything not alphanumeric, dot, dash, or underscore
+        name = re.sub(r'[<>:"/\\|?*\x00-\x1F]', replace_with, name)
+        name = re.sub(r'\s+', '_', name)  # Optional: replace spaces
+        return name.strip(replace_with)
 
     def get_local_release_ids(self):
         if not self.library_path.exists():
@@ -149,7 +148,8 @@ class DiscogsLibraryMirror:
         
         
     def saveCoverArt(self, release_id, metaData):
-        elementDirectory = self.library_path / f"{release_id}_{metaData.get('title', release_id)}"
+        elementDirectory = self.library_path / f"{release_id}_{metaData.get('title', release_id)}" 
+        print(os.join.path(elementDirectory))
         
         try:
             imageURL = self.discogs.release(release_id).images[0]['uri']
@@ -161,7 +161,6 @@ class DiscogsLibraryMirror:
                 print("downloading Cover of " + str(release_id))
                 
                 # urllib.request.urlretrieve(imageURL, os.path.join(elementDirectory, "cover.jpg"))
-                urllib.request.urlr
                 req = urllib.request.Request(
                     imageURL,
                     headers={'User-Agent': 'Mozilla/5.0'}
