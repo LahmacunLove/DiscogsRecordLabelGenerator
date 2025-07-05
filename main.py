@@ -15,7 +15,9 @@ def main():
     
     # library spiegeln / änderungen abgleichen:
     library_mirror = DiscogsLibraryMirror()
-    library_mirror.sync_releases()
+    
+    # library_mirror.sync_releases()
+    library_mirror.sync_single_release(30685762)
     
     # Ende des Prozesses - berechne die Dauer
     end_time = time.time()

@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+Created on Sat Jul  5 22:44:08 2025
+
+@author: ffx
+"""
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
 Created on Fri Apr 18 19:25:32 2025
 
 @author: ffx
@@ -10,6 +18,8 @@ import time
 from pathlib import Path
 import discogs_client
 from config import load_config
+from datetime import datetime
+from datetime import timedelta
 
 import json
 import shutil
@@ -19,31 +29,31 @@ class DiscogsLibraryMirror:
         self.config = load_config()
         self.discogs = self._init_discogs_client()
         self.library_path = Path(self.config["LIBRARY_PATH"]).expanduser()
-        self.username = None
+        self.user = self.discogs.identity()
+        self.username = self.user.username
 
     def _init_discogs_client(self):
         token = self.config.get("DISCOGS_USER_TOKEN")
         if not token:
-            raise ValueError("Discogs-Token fehlt in der Konfig.")
+            raise ValueError("Discogs-Token fehlt in der Config.")
         return discogs_client.Client("DiscogsDBLabelGen/0.1", user_token=token)
 
     def get_collection_release_ids(self):
-       user = self.discogs.identity()
-       self.username = user.username
+      
        folder = self.discogs.user(self.username).collection_folders[0]  # "All" Folder
        release_ids = []
        
-       print("Lade Collection...")
+       print("Lade alle releaseIDs von Collection...")
        page = 1  # start page?
        
        while True:
            releases = folder.releases.page(page)  # Holt Releases der aktuellen Seite
-           print(len(folder.releases.page(page)))
+           # print(len(folder.releases.page(page)))
            for release in releases:
                release_ids.append(release.release.id)
        
            # Wenn die aktuelle Seite weniger als per_page Releases hat, könnten wir fertig sein
-           if len(releases) < 50: # hier später auf 50 ändern, für ganze lib
+           if len(releases) < 100: # hier später auf 50 ändern, für ganze lib
                break
        
            page += 1
@@ -77,8 +87,12 @@ class DiscogsLibraryMirror:
         # Erstelle einen Ordner für das Release basierend auf der ID und ggf. einem Titel
         # (kann auch mit der release_id als Name erfolgen)
         release_folder = self.library_path / f"{release_id}_{metadata.get('title', release_id)}"
-        print(self.library_path)
-        print(release_folder)
+        # print(self.library_path)
+        # print("\n hier:")
+        # print(metadata)
+        # print(type(metadata))
+        # print("\n")
+        # print(release_folder)
         release_folder.mkdir(parents=True, exist_ok=True)
         
         # Speichern der gesamten Metadaten als JSON-Datei
@@ -88,7 +102,7 @@ class DiscogsLibraryMirror:
             json.dump(metadata, f, indent=4, ensure_ascii=False)
     
         print(f"Release {release_id} gespeichert.") 
-
+        
 
     def delete_release_folder(self, release_id):
         """Löscht einen Ordner, der ein Release enthält, falls das Release nicht mehr existiert."""
@@ -96,7 +110,50 @@ class DiscogsLibraryMirror:
         if release_folder.exists() and release_folder.is_dir():
             print(f"Lösche Release: {release_id}")
             shutil.rmtree(release_folder)
+            
+    def convert_to_datetime(self,datetime_string):
+        tz_offset = datetime.strptime(datetime_string[-5:], "%H:%M")
+        return datetime.strptime(datetime_string[:-6], '%Y-%m-%dT%H:%M:%S') + timedelta(hours=tz_offset.hour)
+            
+            
+    def sync_single_release(self, release_id):
+        # Neue Releases speichern
+        # print(f"Neues Release gefunden: {release_id}")
+        collectionElement = self.discogs.release(release_id)  # Holt die Metadaten hier stimmt was nicht
+        
+        timestamp = self.discogs.user(self.username).collection_items(release_id)[0].data['date_added']
+        
+        # # Metadaten sammeln
+        metaData = {
+            "title": collectionElement.title,
+            "artist": [r.name for r in collectionElement.artists],
+            "label": [label.name for label in collectionElement.labels],
+            "genres": collectionElement.genres,
+            "formats": collectionElement.formats[0] if collectionElement.formats else {},
+            "year": collectionElement.year,
+            "id": collectionElement.id,
+            "timestamp": timestamp,
+            "videos": [video.url for video in collectionElement.videos] if hasattr(collectionElement, 'videos') else []
+        }
 
+        # Tracklist sammeln
+        tracklist = []
+        for track in collectionElement.tracklist:
+            track_artists = ', '.join([r.name for r in track.artists]) if hasattr(track, 'artists') else ''
+            tracklist.append({
+                "position": track.position,
+                "title": track.title,
+                "artist": track_artists,
+                "duration": track.duration
+            })
+            
+        metaData["tracklist"] = tracklist
+        
+        self.save_release_metadata(release_id, metaData)
+            
+            
+            
+            
     def sync_releases(self):
         """Vergleicht die Releases und speichert neue Releases oder löscht gelöschte Releases."""
         # IDs von Discogs und lokalen Releases
@@ -107,8 +164,10 @@ class DiscogsLibraryMirror:
         new_ids = discogs_ids - local_ids
         for release_id in new_ids:
             print(f"Neues Release gefunden: {release_id}")
-            metadata = self.discogs.release(release_id).data  # Holt die Metadaten
-            self.save_release_metadata(release_id, metadata)
+            # metadata = self.discogs.release(release_id).data  # Holt die Metadaten hier stimmt was nicht
+            self.sync_single_release(release_id)
+            # print(self.retrieve_metadata(self))
+            # self.save_release_metadata(release_id, metadata)
 
         # Gelöschte Releases entfernen
         removed_ids = local_ids - discogs_ids
