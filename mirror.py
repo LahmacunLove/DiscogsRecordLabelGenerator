@@ -159,7 +159,7 @@ class DiscogsLibraryMirror:
         # do all youtube stuff (comparision with apple music? i there metadata?)
         yt_searcher = youtube_handler.YouTubeMatcher()
         # yt_searcher.fetch_release_metadata(metaData["videos"])
-        yt_searcher.download(metaData, self.release_folder)
+        yt_searcher.audioDWNLDAnalyse(metaData, self.release_folder)
         
             
             

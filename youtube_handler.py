@@ -1,7 +1,5 @@
 from rapidfuzz import fuzz
 from yt_dlp import YoutubeDL
-import os
-from datetime import datetime
 
 class YouTubeMatcher:
     def __init__(self):
@@ -101,7 +99,7 @@ class YouTubeMatcher:
         return
             
     
-    def download(self,  release_metadata, output_path):
+    def audioDWNLDAnalyse(self,  release_metadata, output_path):
         
         self.fetch_release_metadata(release_metadata["videos"])
         
