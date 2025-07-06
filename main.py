@@ -15,8 +15,13 @@ def main():
     
     # library spiegeln / änderungen abgleichen:
     library_mirror = DiscogsLibraryMirror()
+    print("\n--------------------------------\n")
+    
     
     # library_mirror.sync_releases()
+    # library_mirror.sync_single_release(15589261)
+    
+    print("\n--------------------------------\n")
     library_mirror.sync_single_release(30685762)
     
     # Ende des Prozesses - berechne die Dauer
@@ -24,6 +29,7 @@ def main():
     duration = end_time - start_time
       
     # Ausgabe der Dauer
+    print("\n--------------------------------")
     print(f"Das Script hat {duration:.2f} Sekunden benötigt.")
 
 

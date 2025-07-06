@@ -14,6 +14,7 @@ from config import load_config
 from datetime import datetime
 from datetime import timedelta
 import urllib.request
+import youtube_handler
 
 
 import json
@@ -100,10 +101,10 @@ class DiscogsLibraryMirror:
 
     def delete_release_folder(self, release_id):
         """Löscht einen Ordner, der ein Release enthält, falls das Release nicht mehr existiert."""
-        release_folder = self.library_path / f"{release_id}"
-        if release_folder.exists() and release_folder.is_dir():
+        # release_folder = self.library_path / f"{release_id}"
+        if self.release_folder.exists() and self.release_folder.is_dir():
             print(f"Lösche Release: {release_id}")
-            shutil.rmtree(release_folder)
+            shutil.rmtree(self.release_folder)
             
     def convert_to_datetime(self,datetime_string):
         tz_offset = datetime.strptime(datetime_string[-5:], "%H:%M")
@@ -115,6 +116,14 @@ class DiscogsLibraryMirror:
         collectionElement = self.discogs.release(release_id)  # Holt die Metadaten hier stimmt was nicht
         timestamp = self.discogs.user(self.username).collection_items(release_id)[0].data['date_added']
         
+        print(collectionElement.url)
+        
+        try:
+            print(collectionElement.apple)
+            
+            print("done")
+        except:
+            pass
         # Metadaten sammeln
         metaData = {
             "title": collectionElement.title,
@@ -141,16 +150,33 @@ class DiscogsLibraryMirror:
             
         metaData["tracklist"] = tracklist
         
+        self.release_folder = self.library_path / f"{release_id}_{metaData.get('title', release_id)}" 
+        
+        # do all discogs stuff
         self.save_release_metadata(release_id, metaData)
         self.saveCoverArt(release_id, metaData)
+        
+        # do all youtube stuff (comparision with apple music? i there metadata?)
+        yt_searcher = youtube_handler.YouTubeMatcher()
+        # yt_searcher.fetch_release_metadata(metaData["videos"])
+        yt_searcher.download(metaData, self.release_folder)
+        
+            
+            
+        # yt_searcher.match_discogs_videos_to_tracks(metaData, output_path=self.release_folder)
+        # yt_searcher.search_release_tracks(release_id, metaData, self.release_folder )
+
+        # analyze track
+        
+        # create LaTeX snippet?
+            # - qr code
+        
+        # out of loop, create LaTeX full sheet
         
         return
         
         
     def saveCoverArt(self, release_id, metaData):
-        elementDirectory = self.library_path / f"{release_id}_{metaData.get('title', release_id)}" 
-        print(os.join.path(elementDirectory))
-        
         try:
             imageURL = self.discogs.release(release_id).images[0]['uri']
         except:
@@ -167,7 +193,7 @@ class DiscogsLibraryMirror:
                 )
     
                 with urllib.request.urlopen(req) as response, \
-                    open(os.path.join(elementDirectory, "cover.jpg"), 'wb') as out_file:
+                    open(os.path.join(self.release_folder, "cover.jpg"), 'wb') as out_file:
                     out_file.write(response.read())
             except:
                 pass
