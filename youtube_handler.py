@@ -1,17 +1,24 @@
 from rapidfuzz import fuzz
 from yt_dlp import YoutubeDL
+import os, json
 
 class YouTubeMatcher:
-    def __init__(self):
+    def __init__(self, release_folder):
+        self.release_folder = release_folder
         self.ytdl_opts = {
             'quiet': True,
             'skip_download': True,
             'nocheckcertificate': True,
-            'format': 'bestaudio/best',
+            'format': 'ogg/bestaudio/best',
+            # ℹ️ See help(yt_dlp.postprocessor) for a list of av(ailable Postprocessors and their arguments
+            'postprocessors': [{  # Extract audio using ffmpeg
+                'key': 'FFmpegExtractAudio',
+                # 'preferredcodec': 'm4a',
+            }]
         }
-
+        
     def fetch_single_metadata(self, url):
-        print("receiving single metadata")
+        print("receiving single metadata from youtube")
         with YoutubeDL(self.ytdl_opts) as ydl:
             try:
                 info = ydl.extract_info(url, download=False)
@@ -37,6 +44,8 @@ class YouTubeMatcher:
         
         for url in video_urls:
             self.youtube_release_metadata.append(self.fetch_single_metadata(url))
+            
+        # print(self.DiscogsLibraryMirror.release_folder)
         
         return self.youtube_release_metadata
     
@@ -49,7 +58,7 @@ class YouTubeMatcher:
             return None
     
     
-    def match_discogs_release_youtube(self, discogs_metadata, youtube_metadata):
+    def match_discogs_release_youtube(self, discogs_metadata):
         video_urls = discogs_metadata["videos"]
         youtube_metadata = self.fetch_release_metadata(video_urls)
         
@@ -84,7 +93,7 @@ class YouTubeMatcher:
                 # Kombinierter Score
                 score = title_score + duration_score + title_artist_score
     
-                if score > best_score:
+                if score > best_score and score > 75:
                     best_score = score
                     best_match = video
             
@@ -95,17 +104,57 @@ class YouTubeMatcher:
                 'youtube_match': best_match,
                 'match_score': round(best_score, 3)
             })
+            # Speichern als JSON
+            with open(os.path.join(self.release_folder,"yt_matches.json"), "w", encoding="utf-8") as f:
+                json.dump(self.matches, f, indent=2, ensure_ascii=False)
             
         return
             
     
-    def audioDWNLDAnalyse(self,  release_metadata, output_path):
+    def audioDWNLDAnalyse(self,  release_metadata):
+        # erstelle matches:
+            
+        print(self.release_folder)
+        if not os.path.isfile(os.path.join(self.release_folder, "yt_matches.json")):
+            self.match_discogs_release_youtube(release_metadata)
+        else:
+            with open(os.path.join(self.release_folder, "yt_matches.json"), "r", encoding="utf-8") as f:
+                self.matches = json.load(f)
+            pass
         
-        self.fetch_release_metadata(release_metadata["videos"])
+        ytdl_opts = {
+            'quiet': True,
+            'skip_download': False,
+            'nocheckcertificate': True,
+            'format': 'ogg/bestaudio/best',
+            # ℹ️ See help(yt_dlp.postprocessor) for a list of av(ailable Postprocessors and their arguments
+            'postprocessors': [{  # Extract audio using ffmpeg
+                'key': 'FFmpegExtractAudio',
+                # 'preferredcodec': 'm4a',
+            }]
+    }
         
-        self.match_discogs_release_youtube(release_metadata, self.youtube_release_metadata)
+        # # gehe track für track durch:
+        for i, match in enumerate(self.matches):
+            if match["youtube_match"] !=  None:
+                
+                if match["track_position"] == None:
+                    match["track_position"] = str(i)
+                else:
+                    pass
+                
+                if self.matches[i]["discogs_duration"] ==  None:
+                    self.matches[i]["discogs_duration"] = match["youtube_match"]["length"]
+                
+                
+                track_filename = os.path.join(self.release_folder, match["track_position"])
+                ytdl_opts['outtmpl'] = track_filename  # Zielverzeichnis + Dateiname
+                url = match["youtube_match"]["url"]
+                with YoutubeDL(ytdl_opts) as ydl:
+                    info = ydl.extract_info(url, download=True, process=True, force_generic_extractor=False)
+                    
+                    
+        # downloade nach tracklist, wenn mgl. nur audio:
         
-        for match in self.matches:
-            print(match)
         
 

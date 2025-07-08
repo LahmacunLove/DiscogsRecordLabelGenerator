@@ -157,9 +157,9 @@ class DiscogsLibraryMirror:
         self.saveCoverArt(release_id, metaData)
         
         # do all youtube stuff (comparision with apple music? i there metadata?)
-        yt_searcher = youtube_handler.YouTubeMatcher()
+        yt_searcher = youtube_handler.YouTubeMatcher(self.release_folder)
         # yt_searcher.fetch_release_metadata(metaData["videos"])
-        yt_searcher.audioDWNLDAnalyse(metaData, self.release_folder)
+        yt_searcher.audioDWNLDAnalyse(metaData)
         
             
             
@@ -177,26 +177,33 @@ class DiscogsLibraryMirror:
         
         
     def saveCoverArt(self, release_id, metaData):
+        
+        
         try:
             imageURL = self.discogs.release(release_id).images[0]['uri']
         except:
             imageURL = None
-            
-        if imageURL !=  None:
-            try:
-                print("downloading Cover of " + str(release_id))
+        
+        if os.path.isfile(os.path.join(self.release_folder, "cover.jpg")):
+            if imageURL !=  None:
+                try:
+                    print("downloading Cover of " + str(release_id))
+                    
+                    # urllib.request.urlretrieve(imageURL, os.path.join(elementDirectory, "cover.jpg"))
+                    req = urllib.request.Request(
+                        imageURL,
+                        headers={'User-Agent': 'Mozilla/5.0'}
+                    )
+        
+                    with urllib.request.urlopen(req) as response, \
+                        open(os.path.join(self.release_folder, "cover.jpg"), 'wb') as out_file:
+                        out_file.write(response.read())
+                except:
+                    pass
                 
-                # urllib.request.urlretrieve(imageURL, os.path.join(elementDirectory, "cover.jpg"))
-                req = urllib.request.Request(
-                    imageURL,
-                    headers={'User-Agent': 'Mozilla/5.0'}
-                )
-    
-                with urllib.request.urlopen(req) as response, \
-                    open(os.path.join(self.release_folder, "cover.jpg"), 'wb') as out_file:
-                    out_file.write(response.read())
-            except:
+            else:
                 pass
+            
         return
             
             
