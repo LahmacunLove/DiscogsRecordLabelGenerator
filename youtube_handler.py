@@ -3,8 +3,9 @@ from yt_dlp import YoutubeDL
 import os, json
 
 class YouTubeMatcher:
-    def __init__(self, release_folder):
+    def __init__(self, release_folder, debug):
         self.release_folder = release_folder
+        self.debug = debug
         self.ytdl_opts = {
             'quiet': True,
             'skip_download': True,
@@ -59,68 +60,81 @@ class YouTubeMatcher:
     
     
     def match_discogs_release_youtube(self, discogs_metadata):
-        video_urls = discogs_metadata["videos"]
-        youtube_metadata = self.fetch_release_metadata(video_urls)
         
-        self.matches = []
+        if os.path.isfile(os.path.join(self.release_folder, "yt_matches.json")) and self.debug==False:
+           with open(os.path.join(self.release_folder, "yt_matches.json"), "r", encoding="utf-8") as f:
+               self.matches = json.load(f)
+        else:
         
-        for track in discogs_metadata["tracklist"]:
-            best_match = None
-            best_score = 0
-    
-            track_title = track['title']
-            track_duration = self.duration_to_seconds(track['duration'])
-            track_artist = track['artist']
-            track_position = track['position']
+            video_urls = discogs_metadata["videos"]
+            youtube_metadata = self.fetch_release_metadata(video_urls)
             
-            for video in youtube_metadata:
-                video_title = video['title']
-                video_duration = video['length']
-    
-                # Titel-Ähnlichkeit
-                title_score = fuzz.token_sort_ratio(track_title.lower(), video_title.lower()) / 100.0
-                title_artist_score = fuzz.token_sort_ratio(\
-                                       " - ".join([track_title.lower(), track_artist.lower()]),
-                                       " ".join([video_title.lower()]))
+            
+            self.matches = []
+            
+            for track in discogs_metadata["tracklist"]:
+                print("\n")
+                best_match = None
+                best_score = 0
+        
+                track_title = track['title']
+                track_duration = self.duration_to_seconds(track['duration'])
+                track_artist = track['artist']
+                track_position = track['position']
+                
+                print('discogs: ', track['title'])
+                
+                for video in youtube_metadata:
+                    video_title = video['title']
+                    video_duration = video['length']
+                    print('youtube: ', video['title'])
+                    # print(video['length'])
+                    # print(discogs_metadata["tracklist"])
+                    # print(track_duration)
+        
+                    # Titel-Ähnlichkeit
+                    title_score = fuzz.WRatio(track_title.lower(), video_title.lower())
+                    print("titleScore:", title_score)
+                    title_artist_score = fuzz.WRatio(\
+                                           " - ".join([track_title.lower(), track_artist.lower()]),
+                                           " ".join([video_title.lower()]))
+                    print("title_artist: ", title_artist_score)
                     
-                # Dauer-Vergleich
-                if track_duration and video_duration:
-                    diff = abs(track_duration - video_duration)
-                    duration_score = max(0, 1 - (diff / max(track_duration, 1)))  # Normiert
-                else:
-                    duration_score = 0  # Default wenn keine Daten
-    
-                # Kombinierter Score
-                score = title_score + duration_score + title_artist_score
-    
-                if score > best_score and score > 75:
-                    best_score = score
-                    best_match = video
-            
-            self.matches.append({
-                'discogs_track': track_title,
-                'discogs_duration': track_duration,
-                'track_position' : track_position,
-                'youtube_match': best_match,
-                'match_score': round(best_score, 3)
-            })
+                    # print(video)
+                    # print(track_duration)1
+                    # Dauer-Vergleich
+                    if track_duration and video_duration:
+                        diff = abs(track_duration - video_duration)
+                        duration_score = max(0, 1 - (diff / max(track_duration, 1)))  # Normiert
+                        score = title_score + duration_score + title_artist_score
+                    else:
+                        duration_score = 0  # Default wenn keine Daten
+                        score = title_score + title_artist_score
+                    
+                    if score > best_score: #and score > 75:
+                        best_score = score
+                        best_match = video
+                
+                self.matches.append({
+                    'discogs_track': track_title,
+                    'discogs_duration': track_duration,
+                    'track_position' : track_position,
+                    'youtube_match': best_match,
+                    'match_score': round(best_score, 3)
+                })
+                
             # Speichern als JSON
             with open(os.path.join(self.release_folder,"yt_matches.json"), "w", encoding="utf-8") as f:
                 json.dump(self.matches, f, indent=2, ensure_ascii=False)
             
         return
-            
+    
+    
     
     def audioDWNLDAnalyse(self,  release_metadata):
         # erstelle matches:
             
-        print(self.release_folder)
-        if not os.path.isfile(os.path.join(self.release_folder, "yt_matches.json")):
-            self.match_discogs_release_youtube(release_metadata)
-        else:
-            with open(os.path.join(self.release_folder, "yt_matches.json"), "r", encoding="utf-8") as f:
-                self.matches = json.load(f)
-            pass
+        # self.match_discogs_release_youtube(release_metadata)
         
         ytdl_opts = {
             'quiet': True,
@@ -145,7 +159,6 @@ class YouTubeMatcher:
                 
                 if self.matches[i]["discogs_duration"] ==  None:
                     self.matches[i]["discogs_duration"] = match["youtube_match"]["length"]
-                
                 
                 track_filename = os.path.join(self.release_folder, match["track_position"])
                 ytdl_opts['outtmpl'] = track_filename  # Zielverzeichnis + Dateiname

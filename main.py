@@ -19,10 +19,10 @@ def main():
     
     
     # library_mirror.sync_releases()
-    # library_mirror.sync_single_release(15589261)
+    library_mirror.sync_single_release(14482048)
     
     print("\n--------------------------------\n")
-    library_mirror.sync_single_release(30685762)
+    # library_mirror.sync_single_release(30685762)
     
     # Ende des Prozesses - berechne die Dauer
     end_time = time.time()

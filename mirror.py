@@ -28,6 +28,7 @@ class DiscogsLibraryMirror:
         self.library_path = Path(self.config["LIBRARY_PATH"]).expanduser()
         self.user = self.discogs.identity()
         self.username = self.user.username
+        print(self.library_path)
 
     def _init_discogs_client(self):
         token = self.config.get("DISCOGS_USER_TOKEN")
@@ -109,6 +110,28 @@ class DiscogsLibraryMirror:
     def convert_to_datetime(self,datetime_string):
         tz_offset = datetime.strptime(datetime_string[-5:], "%H:%M")
         return datetime.strptime(datetime_string[:-6], '%Y-%m-%dT%H:%M:%S') + timedelta(hours=tz_offset.hour)
+
+
+            
+            
+    def sync_releases(self):
+        """Vergleicht die Releases und speichert neue Releases oder löscht gelöschte Releases."""
+        # IDs von Discogs und lokalen Releases
+        discogs_ids = set(self.get_collection_release_ids())
+        local_ids = set(self.get_local_release_ids())
+
+        # Neue Releases speichern
+        new_ids = discogs_ids - local_ids
+        for release_id in new_ids:
+            print(f"Neues Release gefunden: {release_id}")
+            self.sync_single_release(release_id)
+
+        # Gelöschte Releases entfernen
+        removed_ids = local_ids - discogs_ids
+        for release_id in removed_ids:
+            print(f"Release entfernt: {release_id}")
+            self.delete_release_folder(release_id)
+
             
             
     def sync_single_release(self, release_id):
@@ -153,13 +176,16 @@ class DiscogsLibraryMirror:
         self.release_folder = self.library_path / f"{release_id}_{metaData.get('title', release_id)}" 
         
         # do all discogs stuff
+        # save metadata
         self.save_release_metadata(release_id, metaData)
-        self.saveCoverArt(release_id, metaData)
+        # save coverart
+        # self.saveCoverArt(release_id, metaData)
         
         # do all youtube stuff (comparision with apple music? i there metadata?)
-        yt_searcher = youtube_handler.YouTubeMatcher(self.release_folder)
+        yt_searcher = youtube_handler.YouTubeMatcher(self.release_folder, True)
         # yt_searcher.fetch_release_metadata(metaData["videos"])
-        yt_searcher.audioDWNLDAnalyse(metaData)
+        yt_searcher.match_discogs_release_youtube(metaData)
+        # yt_searcher.audioDWNLDAnalyse(metaData)
         
             
             
@@ -183,6 +209,9 @@ class DiscogsLibraryMirror:
             imageURL = self.discogs.release(release_id).images[0]['uri']
         except:
             imageURL = None
+            
+        print(imageURL)
+        print(os.path.join(self.release_folder, "cover.jpg"))
         
         if os.path.isfile(os.path.join(self.release_folder, "cover.jpg")):
             if imageURL !=  None:
@@ -206,22 +235,4 @@ class DiscogsLibraryMirror:
             
         return
             
-            
-            
-    def sync_releases(self):
-        """Vergleicht die Releases und speichert neue Releases oder löscht gelöschte Releases."""
-        # IDs von Discogs und lokalen Releases
-        discogs_ids = set(self.get_collection_release_ids())
-        local_ids = set(self.get_local_release_ids())
 
-        # Neue Releases speichern
-        new_ids = discogs_ids - local_ids
-        for release_id in new_ids:
-            print(f"Neues Release gefunden: {release_id}")
-            self.sync_single_release(release_id)
-
-        # Gelöschte Releases entfernen
-        removed_ids = local_ids - discogs_ids
-        for release_id in removed_ids:
-            print(f"Release entfernt: {release_id}")
-            self.delete_release_folder(release_id)
