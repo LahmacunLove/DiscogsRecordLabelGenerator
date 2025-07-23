@@ -15,6 +15,7 @@ from datetime import datetime
 from datetime import timedelta
 import urllib.request
 import youtube_handler
+import concurrent.futures
 
 
 import json
@@ -51,7 +52,7 @@ class DiscogsLibraryMirror:
                release_ids.append(release.release.id)
        
            # Wenn die aktuelle Seite weniger als per_page Releases hat, könnten wir fertig sein
-           if len(releases) < 100: # hier später auf 50 ändern, für ganze lib
+           if len(releases) < 50: # hier später auf 50 ändern, für ganze lib
                break
        
            page += 1
@@ -120,17 +121,26 @@ class DiscogsLibraryMirror:
         discogs_ids = set(self.get_collection_release_ids())
         local_ids = set(self.get_local_release_ids())
 
-        # Neue Releases speichern
+        # Neue Releases speichern (zweite variante parallel it 4 threads)
         new_ids = discogs_ids - local_ids
-        for release_id in new_ids:
-            print(f"Neues Release gefunden: {release_id}")
-            self.sync_single_release(release_id)
+        # for release_id in new_ids:
+        #     print(f"Neues Release gefunden: {release_id}")
+        #     self.sync_single_release(release_id)
+        with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
+            futures = [executor.submit(self.sync_single_release, release_id) for release_id in new_ids]
+        
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    result = future.result()
+                except Exception as e:
+                    print(f"Fehler beim Synchronisieren: {e}")
+
 
         # Gelöschte Releases entfernen
-        removed_ids = local_ids - discogs_ids
-        for release_id in removed_ids:
-            print(f"Release entfernt: {release_id}")
-            self.delete_release_folder(release_id)
+        # removed_ids = local_ids - discogs_ids
+        # for release_id in removed_ids:
+        #     print(f"Release entfernt: {release_id}")
+        #     self.delete_release_folder(release_id)
 
             
             
@@ -179,17 +189,13 @@ class DiscogsLibraryMirror:
         # save metadata
         self.save_release_metadata(release_id, metaData)
         # save coverart
-        # self.saveCoverArt(release_id, metaData)
+        self.saveCoverArt(release_id, metaData)
         
-        # do all youtube stuff (comparision with apple music? i there metadata?)
-        yt_searcher = youtube_handler.YouTubeMatcher(self.release_folder, True)
-        # yt_searcher.fetch_release_metadata(metaData["videos"])
-        yt_searcher.match_discogs_release_youtube(metaData)
-        # yt_searcher.audioDWNLDAnalyse(metaData)
+        # do all youtube stuff
+        yt_searcher = youtube_handler.YouTubeMatcher(self.release_folder, False) # initiiere yt_module
+        yt_searcher.match_discogs_release_youtube(metaData) # match metadata and save matches
+        yt_searcher.audioDWNLDAnalyse(metaData) # download matches
         
-            
-            
-        # yt_searcher.match_discogs_videos_to_tracks(metaData, output_path=self.release_folder)
         # yt_searcher.search_release_tracks(release_id, metaData, self.release_folder )
 
         # analyze track
@@ -204,7 +210,6 @@ class DiscogsLibraryMirror:
         
     def saveCoverArt(self, release_id, metaData):
         
-        
         try:
             imageURL = self.discogs.release(release_id).images[0]['uri']
         except:
@@ -213,7 +218,7 @@ class DiscogsLibraryMirror:
         print(imageURL)
         print(os.path.join(self.release_folder, "cover.jpg"))
         
-        if os.path.isfile(os.path.join(self.release_folder, "cover.jpg")):
+        if not os.path.isfile(os.path.join(self.release_folder, "cover.jpg")):
             if imageURL !=  None:
                 try:
                     print("downloading Cover of " + str(release_id))
