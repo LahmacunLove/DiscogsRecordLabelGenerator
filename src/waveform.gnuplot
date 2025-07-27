@@ -1,6 +1,7 @@
 set terminal png size 2500,250;
 
-set output 'waveform.png';
+# Output wird von Command-Line gesetzt
+# set output 'waveform.png';
 unset key;
 unset tics;
 unset border;

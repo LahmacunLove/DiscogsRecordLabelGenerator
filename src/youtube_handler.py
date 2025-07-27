@@ -10,6 +10,72 @@ from logger import logger
 import concurrent.futures
 import threading
 
+def _analyze_track_standalone(task):
+    """Standalone-Funktion für parallele Track-Analyse"""
+    import time
+    import os
+    from analyzeSoundFile import analyzeAudioFileOrStream
+    from logger import logger
+    
+    audio_file = task['audio_file']
+    track_filename_base = task['track_filename_base']
+    track_position = task['track_position']
+    
+    try:
+        start_time = time.time()
+        
+        json_file = f"{track_filename_base}.json"
+        waveform_file = f"{track_filename_base}_waveform.png"
+        
+        analysis_needed = not os.path.exists(json_file)
+        waveform_needed = not os.path.exists(waveform_file)
+        
+        if not analysis_needed and not waveform_needed:
+            return {
+                'track': track_position,
+                'success': True,
+                'duration': 0,
+                'error': 'Already analyzed'
+            }
+        
+        # Erstelle Analyzer
+        analyzer = analyzeAudioFileOrStream(
+            fileOrStream=audio_file,
+            sampleRate=44100,
+            plotWaveform=False,
+            musicExtractor=True,
+            plotSpectogram=True,
+            debug=False
+        )
+        
+        # Führe Essentia-Analyse durch
+        if analysis_needed:
+            analyzer.readAudioFile(ffmpegUsage=False)
+            analyzer.analyzeMusicExtractor()
+        
+        # Führe Waveform-Generierung durch
+        if waveform_needed:
+            try:
+                analyzer.generate_waveform_gnuplot()
+            except Exception as e:
+                logger.warning(f"Waveform generation failed for {track_position}: {e}")
+        
+        duration = time.time() - start_time
+        return {
+            'track': track_position,
+            'success': True,
+            'duration': duration,
+            'error': None
+        }
+        
+    except Exception as e:
+        return {
+            'track': track_position,
+            'success': False,
+            'duration': 0,
+            'error': str(e)
+        }
+
 class YouTubeMatcher:
     def __init__(self, release_folder, debug):
         self.release_folder = release_folder
@@ -230,18 +296,83 @@ class YouTubeMatcher:
                 logger.error(f"Download error for track {track_position}: {e}")
                 continue
         
-        # Analysis phase - only after all downloads complete
-        logger.info(f"Download phase complete. Starting analysis for {len(downloaded_tracks)} tracks...")
-        
-        for track_filename_base, track_position in downloaded_tracks:
-            try:
-                self.analyze_downloaded_track(track_filename_base, track_position)
-            except Exception as e:
-                logger.error(f"Analysis failed for track {track_position}: {e}")
+        # Analysis phase - parallel analysis of all downloaded tracks
+        if downloaded_tracks:
+            logger.info(f"Download phase complete. Starting parallel analysis for {len(downloaded_tracks)} tracks...")
+            self._parallel_audio_analysis(downloaded_tracks)
         
         logger.success(f"Audio download and analysis completed for {len(downloaded_tracks)} tracks")
         return
     
+    def _parallel_audio_analysis(self, downloaded_tracks):
+        """Führt parallele Audio-Analyse mit ThreadPoolExecutor durch"""
+        import concurrent.futures
+        import time
+        
+        # Optimale Thread-Anzahl: CPU-Kerne, aber nicht mehr als Tracks
+        max_workers = min(len(downloaded_tracks), os.cpu_count() or 2)
+        
+        logger.info(f"🔄 Starting parallel analysis with {max_workers} workers")
+        analysis_start = time.time()
+        
+        # Bereite Daten für parallele Verarbeitung vor
+        analysis_tasks = []
+        for track_filename_base, track_position in downloaded_tracks:
+            audio_file = self.get_downloaded_audio_file(track_filename_base)
+            if audio_file:
+                analysis_tasks.append({
+                    'audio_file': audio_file,
+                    'track_filename_base': track_filename_base,
+                    'track_position': track_position
+                })
+        
+        if not analysis_tasks:
+            logger.warning("No audio files found for analysis")
+            return
+        
+        # Verwende ThreadPoolExecutor mit expliziten Task-Argumenten
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Starte alle Analyse-Tasks
+            future_to_track = {
+                executor.submit(_analyze_track_standalone, task): task['track_position']
+                for task in analysis_tasks
+            }
+            
+            # Sammle Ergebnisse
+            results = []
+            for future in concurrent.futures.as_completed(future_to_track):
+                track_position = future_to_track[future]
+                try:
+                    result = future.result()
+                    results.append(result)
+                    
+                    if result['success']:
+                        logger.success(f"✅ Track {result['track']} analyzed in {result['duration']:.2f}s")
+                    else:
+                        logger.error(f"❌ Track {result['track']} failed: {result['error']}")
+                        
+                except Exception as e:
+                    logger.error(f"❌ Track {track_position} crashed: {e}")
+                    results.append({
+                        'track': track_position,
+                        'success': False,
+                        'duration': 0,
+                        'error': f"Execution error: {e}"
+                    })
+        
+        # Performance-Statistiken
+        total_time = time.time() - analysis_start
+        successful = sum(1 for r in results if r['success'])
+        failed = len(results) - successful
+        avg_time = sum(r['duration'] for r in results if r['success']) / max(successful, 1)
+        
+        logger.info(f"📊 Parallel Analysis Results:")
+        logger.info(f"   ✅ Successful: {successful}/{len(downloaded_tracks)} tracks")
+        logger.info(f"   ❌ Failed: {failed} tracks")
+        logger.info(f"   ⏱️  Total time: {total_time:.2f}s")
+        logger.info(f"   📈 Average per track: {avg_time:.2f}s")
+        logger.info(f"   🚀 Speedup: ~{len(downloaded_tracks) * avg_time / total_time:.1f}x faster than sequential")
+
 
 
     def download_and_stream_audio(self, youtube_url, output_path="output.ogg"):
@@ -359,14 +490,8 @@ class YouTubeMatcher:
             # Führe Waveform-Generation durch (falls noch nicht existiert)
             if not waveform_exists:
                 try:
-                    # Entscheide zwischen Benchmark oder normaler Generierung
-                    # Für den ersten Track eines Albums: Benchmark-Test
-                    if track_position in ['A1', '1', 'A', '01']:
-                        logger.info(f"Running waveform benchmark for first track: {track_position}")
-                        waveform_success = analyzer.generate_both_waveforms_benchmark()
-                    else:
-                        # Normale gnuplot-Generierung für andere Tracks
-                        waveform_success = analyzer.generate_waveform_gnuplot()
+                    # Waveform-Generierung für alle Tracks mit gnuplot
+                    waveform_success = analyzer.generate_waveform_gnuplot()
                     
                     if waveform_success:
                         logger.success(f"Waveform generation completed for track {track_position}")

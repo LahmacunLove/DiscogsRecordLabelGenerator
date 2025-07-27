@@ -188,15 +188,33 @@ class analyzeAudioFileOrStream:
                 '-'
             ]
             
-            # Gnuplot-Befehl
+            # Gnuplot-Script-Pfad (korrekt für src/ Struktur)
             gnuplot_script_path = os.path.join(os.path.dirname(__file__), "waveform.gnuplot")
             if not os.path.exists(gnuplot_script_path):
                 logger.error(f"Gnuplot script not found: {gnuplot_script_path}")
+                logger.debug(f"Searched at: {gnuplot_script_path}")
+                logger.debug(f"__file__ directory: {os.path.dirname(__file__)}")
                 return False
-                
-            gnuplot_command = [
-                'gnuplot', '-persist', '-c', gnuplot_script_path
-            ]
+            
+            # Erstelle temporäres gnuplot-Script mit korrektem Output-Pfad
+            import tempfile
+            temp_script = tempfile.NamedTemporaryFile(mode='w', suffix='.gnuplot', delete=False)
+            
+            # Lade Original-Script und setze korrekten Output-Pfad
+            with open(gnuplot_script_path, 'r') as original:
+                script_content = original.read()
+            
+            # Ersetze Output-Pfad im Script
+            script_content = script_content.replace(
+                "# Output wird von Command-Line gesetzt\n# set output 'waveform.png';",
+                f"set output '{waveform_file}';"
+            )
+            
+            temp_script.write(script_content)
+            temp_script.close()
+            
+            # Gnuplot-Befehl mit temporärem Script
+            gnuplot_command = ['gnuplot', temp_script.name]
             
             # FFmpeg-Prozess starten
             ffmpeg_pipe = subprocess.Popen(ffmpeg_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -207,115 +225,49 @@ class analyzeAudioFileOrStream:
             # Warten bis beide Prozesse fertig sind
             ffmpeg_pipe.stdout.close()
             plot_output, plot_error = plot.communicate()
-            ffmpeg_pipe.wait()
+            ffmpeg_output, ffmpeg_error = ffmpeg_pipe.communicate()
             
-            # Waveform-Datei zum korrekten Ort verschieben
-            if os.path.isfile("waveform.png"):
-                shutil.move("waveform.png", waveform_file)
-                logger.debug(f"Waveform generated: {os.path.basename(waveform_file)}")
+            # Prüfe Ergebnisse
+            if plot.returncode != 0:
+                logger.error(f"Gnuplot error (return code {plot.returncode}): {plot_error.decode()}")
+                return False
+                
+            if ffmpeg_pipe.returncode != 0:
+                logger.error(f"FFmpeg error (return code {ffmpeg_pipe.returncode}): {ffmpeg_error.decode()}")
+                return False
+            
+            # Prüfe ob die Datei erstellt wurde
+            if os.path.exists(waveform_file) and os.path.getsize(waveform_file) > 0:
+                logger.success(f"Waveform generated: {os.path.basename(waveform_file)}")
+                # Cleanup temporäres Script
+                try:
+                    os.unlink(temp_script.name)
+                except:
+                    pass
                 return True
             else:
+                logger.error(f"Waveform generation failed - no output file created at {waveform_file}")
                 if plot_error:
-                    logger.error(f"Gnuplot error: {plot_error.decode()}")
-                logger.error("Waveform generation failed - no output file created")
+                    logger.debug(f"Gnuplot stderr: {plot_error.decode()}")
+                if ffmpeg_error:
+                    logger.debug(f"FFmpeg stderr: {ffmpeg_error.decode()}")
+                # Cleanup temporäres Script
+                try:
+                    os.unlink(temp_script.name)
+                except:
+                    pass
                 return False
                 
         except Exception as e:
             logger.error(f"Error generating waveform: {e}")
-            return False
-    
-    def generate_waveform_essentia(self):
-        """Generiert Waveform mit Essentia und matplotlib (Alternative zu gnuplot)"""
-        if not hasattr(self, 'audioData') or self.audioData is None:
-            logger.warning("No audio data loaded - loading audio first")
+            # Cleanup temporäres Script
             try:
-                self.readAudioFile(ffmpegUsage=False)
-            except Exception as e:
-                logger.error(f"Failed to load audio for Essentia waveform: {e}")
-                return False
-        
-        # Pfad für Waveform-PNG
-        waveform_file = os.path.splitext(self.fileOrStream)[0] + "_waveform_essentia.png"
-        
-        # Prüfe ob bereits existiert
-        if os.path.exists(waveform_file):
-            logger.debug(f"Essentia waveform already exists: {os.path.basename(waveform_file)}")
-            return True
-        
-        try:
-            start_time = time.time()
-            logger.process(f"Generating Essentia waveform: {os.path.basename(waveform_file)}")
-            
-            # Erstelle Zeitachse
-            duration = len(self.audioData) / self.sampleRate
-            time_axis = np.linspace(0, duration, len(self.audioData))
-            
-            # Downsampling für Performance (optional)
-            downsample_factor = max(1, len(self.audioData) // 2500)  # Max 2500 Punkte für Waveform
-            if downsample_factor > 1:
-                audio_downsampled = self.audioData[::downsample_factor]
-                time_downsampled = time_axis[::downsample_factor]
-            else:
-                audio_downsampled = self.audioData
-                time_downsampled = time_axis
-            
-            # Erstelle Plot mit gleichen Dimensionen wie gnuplot (2500x250)
-            plt.figure(figsize=(10, 1), dpi=250)  # 2500x250 px bei 250 DPI
-            plt.plot(time_downsampled, audio_downsampled, color='black', linewidth=0.5)
-            
-            # Entferne alle Achsen und Rahmen (wie gnuplot Version)
-            plt.axis('off')
-            plt.gca().set_frame_on(False)
-            plt.subplots_adjust(left=0, right=1, top=1, bottom=0, hspace=0, wspace=0)
-            
-            # Speichere als PNG
-            plt.savefig(waveform_file, 
-                       bbox_inches='tight', 
-                       pad_inches=0, 
-                       facecolor='white',
-                       edgecolor='none',
-                       dpi=250)
-            plt.close()  # Wichtig: Schließe Plot um Memory zu sparen
-            
-            end_time = time.time()
-            generation_time = end_time - start_time
-            
-            logger.debug(f"Essentia waveform generated in {generation_time:.2f}s: {os.path.basename(waveform_file)}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error generating Essentia waveform: {e}")
+                os.unlink(temp_script.name)
+            except:
+                pass
             return False
     
-    def generate_both_waveforms_benchmark(self):
-        """Generiert beide Waveform-Arten und vergleicht Performance"""
-        if not os.path.isfile(self.fileOrStream):
-            logger.error(f"Audio file not found: {self.fileOrStream}")
-            return False
-            
-        logger.info(f"🏁 Starting waveform generation benchmark for: {os.path.basename(self.fileOrStream)}")
-        
-        # Test gnuplot Methode
-        gnuplot_start = time.time()
-        gnuplot_success = self.generate_waveform_gnuplot()
-        gnuplot_time = time.time() - gnuplot_start
-        
-        # Test Essentia Methode
-        essentia_start = time.time()
-        essentia_success = self.generate_waveform_essentia()
-        essentia_time = time.time() - essentia_start
-        
-        # Vergleiche Performance
-        logger.info("📊 Waveform Generation Benchmark Results:")
-        logger.info(f"   🔧 gnuplot method: {gnuplot_time:.3f}s {'✅' if gnuplot_success else '❌'}")
-        logger.info(f"   🎵 Essentia method: {essentia_time:.3f}s {'✅' if essentia_success else '❌'}")
-        
-        if gnuplot_success and essentia_success:
-            speed_ratio = gnuplot_time / essentia_time
-            if speed_ratio > 1:
-                logger.info(f"   🏆 Essentia is {speed_ratio:.1f}x faster than gnuplot")
-            else:
-                logger.info(f"   🏆 gnuplot is {1/speed_ratio:.1f}x faster than Essentia")
-        
-        return gnuplot_success or essentia_success
+    def generate_waveform(self):
+        """Generiert Waveform mit gnuplot (einzige Methode)"""
+        return self.generate_waveform_gnuplot()
     

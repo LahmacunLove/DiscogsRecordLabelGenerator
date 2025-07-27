@@ -57,19 +57,36 @@ def inplace_change(filename, old_string, new_string):
         f.write(s)
 
 def create_latex_label_file(release_folder, metadata):
-    """Erstellt eine LaTeX-Label-Datei für ein Release"""
+    """Erstellt eine LaTeX-Label-Datei für ein Release (Original-Design)"""
     
     label_file = os.path.join(release_folder, 'label.tex')
     
-    # Prüfe ob Label bereits existiert
-    if os.path.exists(label_file):
-        logger.info(f"LaTeX label already exists: {os.path.basename(label_file)}")
-        return True
+    # Überschreibe immer - keine Existenz-Prüfung
+    # if os.path.exists(label_file):
+    #     logger.info(f"LaTeX label already exists: {os.path.basename(label_file)}")
+    #     return True
+    
+    return _create_label_original(release_folder, metadata, label_file)
+
+def create_latex_label_alternative(release_folder, metadata):
+    """Erstellt eine alternative LaTeX-Label-Datei für ein Release"""
+    
+    label_file = os.path.join(release_folder, 'label_alt.tex')
+    
+    # Überschreibe immer - keine Existenz-Prüfung
+    # if os.path.exists(label_file):
+    #     logger.info(f"Alternative LaTeX label already exists: {os.path.basename(label_file)}")
+    #     return True
+    
+    return _create_label_alternative(release_folder, metadata, label_file)
+
+def _create_label_original(release_folder, metadata, label_file):
+    """Original Label-Design - basierend auf der ursprünglichen createLatexLabelFile Methode"""
     
     try:
-        logger.process(f"Creating LaTeX label for release {metadata.get('id', 'unknown')}")
+        logger.process(f"Creating original LaTeX label for release {metadata.get('id', 'unknown')}")
         
-        # Erstelle DataFrame für Tracks
+        # Erstelle DataFrame für Tracks (wie im Original)
         tracks_data = []
         for track in metadata.get('tracklist', []):
             track_pos = track.get('position', '')
@@ -87,16 +104,43 @@ def create_latex_label_file(release_folder, metadata):
                 try:
                     with open(json_file, 'r') as f:
                         analysis_data = json.load(f)
-                    bpm = str(round(analysis_data.get('rhythm', {}).get('bpm', 0)))
-                    key = analysis_data.get('tonal', {}).get('key_key', '')
-                except:
+                    
+                    # BPM aus rhythm-Sektion
+                    bpm_value = analysis_data.get('rhythm', {}).get('bpm', 0)
+                    if bpm_value and bpm_value > 0:
+                        bpm = str(round(bpm_value))
+                    
+                    # Key aus tonal-Sektion (verschiedene Möglichkeiten prüfen)
+                    tonal_data = analysis_data.get('tonal', {})
+                    key_key = tonal_data.get('key_key', '')
+                    key_scale = tonal_data.get('key_scale', '')
+                    key_temperley = tonal_data.get('key_temperley', {})
+                    
+                    # Prüfe verschiedene Key-Quellen
+                    if key_temperley and isinstance(key_temperley, dict):
+                        key_name = key_temperley.get('key', '')
+                        key_scale = key_temperley.get('scale', '')
+                        if key_name:
+                            # Kombiniere Key + Scale (z.B. "C major" → "C")
+                            if 'major' in key_scale.lower():
+                                key = key_name.upper()
+                            elif 'minor' in key_scale.lower():
+                                key = key_name.lower() + 'm'
+                            else:
+                                key = key_name
+                    elif key_key:
+                        key = key_key
+                        
+                except Exception as e:
+                    logger.debug(f"Error parsing analysis data for {track_pos}: {e}")
                     pass
             
-            # Waveform-Pfad
+            # Waveform-Pfad (absoluter Pfad wie im Original)
             waveform_path = f"{track_base}_waveform.png"
             waveform_latex = ''
             if os.path.exists(waveform_path):
-                waveform_latex = f'\\includegraphics[width=2cm]{{{waveform_path}}}'
+                # Absoluter Pfad für LaTeX wie im Original
+                waveform_latex = f'\\includegraphics[width=2cm]{{{os.path.abspath(waveform_path)}}}'
             
             tracks_data.append({
                 'pos': track_pos,
@@ -108,35 +152,36 @@ def create_latex_label_file(release_folder, metadata):
                 'waveform': waveform_latex
             })
         
-        # DataFrame erstellen
+        # DataFrame erstellen (pandas-basiert wie im Original)
         track_df = pd.DataFrame(tracks_data)
         
-        # NaN-Werte durch leere Strings ersetzen
+        # NaN-Werte durch leere Strings ersetzen (Original-Verhalten)
         track_df = track_df.fillna('')
         
-        # Unicode-Konvertierung für LaTeX
+        # Unicode-Konvertierung für LaTeX (applymap wie im Original)
         for col in ['pos', 'title', 'artist', 'duration', 'bpm', 'key']:
             if col in track_df.columns:
                 track_df[col] = track_df[col].apply(unicode_to_latex)
         
-        # Behandle Various Artists Problem
+        # Original Various Artists Behandlung
         unique_artists = track_df['artist'].unique()
-        if len(unique_artists) <= 1 or all(artist == '' for artist in unique_artists):
-            # Nur ein Artist oder alle leer - verstecke Artist-Spalte
+        if len(unique_artists) == 1:
+            # Nur ein Artist - verstecke Artist-Spalte (Original-Logik)
             columns_to_show = ['pos', 'title', 'duration', 'bpm', 'key', 'waveform']
         else:
-            # Mehrere Artists - kombiniere title und artist
+            # Mehrere Artists - kombiniere title und artist (Original-Verhalten)
             track_df['title'] = track_df['title'] + ' / ' + track_df['artist']
             columns_to_show = ['pos', 'title', 'duration', 'bpm', 'key', 'waveform']
         
         # Filtere DataFrame
         track_df_display = track_df[columns_to_show]
         
-        # Erstelle LaTeX-Tabelle
+        # Original LaTeX-Tabelle mit exakter Original-Formatierung (ohne Header)
         latex_table = track_df_display.to_latex(
             index=False,
+            header=False,  # Entferne Tabellen-Header
             escape=False,  # Wichtig: Lass LaTeX-Befehle durch
-            column_format="@{}lXlllc@{}"
+            column_format="@{}lXlllc@{}"  # Original-Spaltenformat
         )
         
         # Release-Informationen vorbereiten
@@ -153,11 +198,11 @@ def create_latex_label_file(release_folder, metadata):
         else:
             label_str = str(labels)
         
-        # Jahr extrahieren
+        # Jahr und Release ID
         year = str(metadata.get('year', ''))
         release_id = str(metadata.get('id', ''))
         
-        # LaTeX-Inhalt erstellen
+        # Original LaTeX-Inhalt mit exakter fitbox-Struktur
         latex_content = f'''\\begin{{fitbox}}{{8cm}}{{4.5cm}}
 \\textbf{{{unicode_to_latex(artist_str)}}} \\\\
 {unicode_to_latex(title)}
@@ -172,18 +217,153 @@ def create_latex_label_file(release_folder, metadata):
         with open(label_file, 'w', encoding='utf-8') as f:
             f.write(latex_content)
         
-        # Ersetze tabular durch tabularx für bessere Spaltenbreiten
+        # Original tabularx-Konvertierung (wie im Original)
         inplace_change(label_file, "\\begin{tabular}", "\\begin{tabularx}{8.5cm}")
         inplace_change(label_file, "\\end{tabular}", "\\end{tabularx}")
         
-        logger.success(f"LaTeX label created: {os.path.basename(label_file)}")
+        logger.success(f"Original LaTeX label created: {os.path.basename(label_file)}")
         return True
         
     except Exception as e:
-        logger.error(f"Error creating LaTeX label: {e}")
+        logger.error(f"Error creating original LaTeX label: {e}")
         return False
 
-def combine_latex_labels(library_path, output_dir, max_labels=None):
+def _create_label_alternative(release_folder, metadata, label_file):
+    """Alternative Label-Design ohne Tabelle"""
+    
+    try:
+        logger.process(f"Creating alternative LaTeX label for release {metadata.get('id', 'unknown')}")
+        
+        # Release-Informationen vorbereiten
+        artists = metadata.get('artist', [])
+        if isinstance(artists, list):
+            artist_str = ', '.join(artists)
+        else:
+            artist_str = str(artists)
+        
+        title = metadata.get('title', '')
+        labels = metadata.get('label', [])
+        if isinstance(labels, list):
+            label_str = ', '.join(labels)
+        else:
+            label_str = str(labels)
+        
+        year = str(metadata.get('year', ''))
+        release_id = str(metadata.get('id', ''))
+        
+        # Track-Liste als kompakte Liste
+        track_lines = []
+        for track in metadata.get('tracklist', []):
+            track_pos = track.get('position', '')
+            track_title = track.get('title', '')
+            track_duration = track.get('duration', '')
+            
+            # BPM und Key laden
+            track_base = os.path.join(release_folder, track_pos)
+            bpm, key = '', ''
+            json_file = f"{track_base}.json"
+            if os.path.exists(json_file):
+                try:
+                    with open(json_file, 'r') as f:
+                        analysis_data = json.load(f)
+                    
+                    # BPM aus rhythm-Sektion
+                    bpm_value = analysis_data.get('rhythm', {}).get('bpm', 0)
+                    if bpm_value and bpm_value > 0:
+                        bpm = str(round(bpm_value))
+                    
+                    # Key aus tonal-Sektion (verschiedene Möglichkeiten prüfen)
+                    tonal_data = analysis_data.get('tonal', {})
+                    key_temperley = tonal_data.get('key_temperley', {})
+                    
+                    # Prüfe verschiedene Key-Quellen
+                    if key_temperley and isinstance(key_temperley, dict):
+                        key_name = key_temperley.get('key', '')
+                        key_scale = key_temperley.get('scale', '')
+                        if key_name:
+                            # Kombiniere Key + Scale (z.B. "C major" → "C")
+                            if 'major' in key_scale.lower():
+                                key = key_name.upper()
+                            elif 'minor' in key_scale.lower():
+                                key = key_name.lower() + 'm'
+                            else:
+                                key = key_name
+                    elif tonal_data.get('key_key'):
+                        key = tonal_data.get('key_key', '')
+                        
+                except Exception as e:
+                    logger.debug(f"Error parsing analysis data for {track_pos}: {e}")
+                    pass
+            
+            # Formatiere Track-Zeile
+            track_info = f"{track_pos}. {unicode_to_latex(track_title)}"
+            if track_duration:
+                track_info += f" ({track_duration})"
+            if bpm and bpm != '0':
+                track_info += f" {bpm}bpm"
+            if key:
+                track_info += f" {key}"
+            
+            track_lines.append(track_info)
+        
+        # Verbinde Tracks mit Zeilenumbrüchen
+        tracks_text = ' \\\\ '.join(track_lines)
+        
+        # Dynamische Schriftgrößen für Alternative Version
+        track_count = len(track_lines)
+        if track_count <= 4:
+            artist_size = "\\normalsize"
+            title_size = "\\small"
+            track_size = "\\scriptsize"
+        elif track_count <= 8:
+            artist_size = "\\small"
+            title_size = "\\footnotesize"
+            track_size = "\\tiny"
+        else:
+            artist_size = "\\footnotesize"
+            title_size = "\\tiny"
+            track_size = "\\tiny"
+        
+        # Hole Land/Ort aus Metadaten
+        country = metadata.get('country', '')
+        location_info = f", {country}" if country else ""
+        
+        # Alternative responsives LaTeX-Layout (ohne Tabelle)
+        latex_content = f'''\\begin{{minipage}}{{3.5cm}}
+% Header: Artist & Title (responsive Größe)
+\\begin{{center}}
+\\textbf{{{artist_size} {unicode_to_latex(artist_str)}}} \\\\
+\\vspace{{1pt}}
+{{{title_size} {unicode_to_latex(title)}}}
+\\end{{center}}
+
+\\vspace{{3pt}}
+
+% Track-Liste mittig
+\\begin{{center}}
+{{{track_size}
+{tracks_text}
+}}
+\\end{{center}}
+
+\\vfill
+
+% Footer mit Land
+\\raggedright\\tiny {unicode_to_latex(label_str)}, {year}{location_info}
+\\end{{minipage}}'''
+        
+        # Schreibe LaTeX-Datei
+        with open(label_file, 'w', encoding='utf-8') as f:
+            f.write(latex_content)
+        
+        logger.success(f"Alternative LaTeX label created: {os.path.basename(label_file)}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error creating alternative LaTeX label: {e}")
+        return False
+
+def combine_latex_labels(library_path, output_dir, max_labels=None, label_variant="both"):
     """
     Kombiniert alle Labels zu einem druckbaren LaTeX-Dokument
     Basierend auf der originalen combineLatex Funktion aus der Git-History
@@ -192,19 +372,30 @@ def combine_latex_labels(library_path, output_dir, max_labels=None):
         library_path: Pfad zum Discogs Library Verzeichnis
         output_dir: Ausgabe-Verzeichnis für das finale LaTeX-Dokument
         max_labels: Maximale Anzahl Labels (None = alle)
+        label_variant: "original", "alternative", "both" - welche Label-Varianten zu nutzen
     """
     
     # Erstelle Output-Verzeichnis falls nicht vorhanden
     os.makedirs(output_dir, exist_ok=True)
     
-    # Finde alle Release-Ordner mit label.tex
+    # Finde alle Release-Ordner mit Labels (abhängig von label_variant)
     release_dirs = []
     for item in os.listdir(library_path):
         item_path = os.path.join(library_path, item)
         if os.path.isdir(item_path):
-            label_file = os.path.join(item_path, 'label.tex')
-            if os.path.exists(label_file):
-                release_dirs.append(item)
+            has_original = os.path.exists(os.path.join(item_path, 'label.tex'))
+            has_alternative = os.path.exists(os.path.join(item_path, 'label_alt.tex'))
+            
+            if label_variant == "original" and has_original:
+                release_dirs.append((item, "label.tex"))
+            elif label_variant == "alternative" and has_alternative:
+                release_dirs.append((item, "label_alt.tex"))
+            elif label_variant == "both" and (has_original or has_alternative):
+                # Beide Varianten hinzufügen falls vorhanden
+                if has_original:
+                    release_dirs.append((item, "label.tex"))
+                if has_alternative:
+                    release_dirs.append((item, "label_alt.tex"))
     
     if not release_dirs:
         logger.warning("No releases with LaTeX labels found")
@@ -253,7 +444,7 @@ def combine_latex_labels(library_path, output_dir, max_labels=None):
                         if release_num > len(release_dirs):
                             break
                         
-                        current_release = release_dirs[release_idx]
+                        release_dir, label_filename = release_dirs[release_idx]
                         
                         # Position berechnen (Original-Koordinaten)
                         x_pos = 4.1 * col  # Original: 4.1 inches Spaltenabstand
@@ -263,7 +454,7 @@ def combine_latex_labels(library_path, output_dir, max_labels=None):
                         f.write(f"\t\\draw[rounded corners=0.5cm] ({x_pos} in, {y_pos} in) rectangle +(4in,2in);\n")
                         
                         # QR-Code Position (falls vorhanden)
-                        qr_file = os.path.join(library_path, current_release, 'qrcode.png')
+                        qr_file = os.path.join(library_path, release_dir, 'qrcode.png')
                         if os.path.exists(qr_file):
                             qr_x = x_pos + 3.3
                             qr_y = y_pos - 0.36 + 2
@@ -276,7 +467,7 @@ def combine_latex_labels(library_path, output_dir, max_labels=None):
                         content_x = x_pos
                         content_y = y_pos + 1
                         # Absoluter Pfad zur Label-Datei
-                        label_path = os.path.abspath(os.path.join(library_path, current_release, 'label.tex')).replace('\\', '/')
+                        label_path = os.path.abspath(os.path.join(library_path, release_dir, label_filename)).replace('\\', '/')
                         f.write(f"\t\\node[right,align=left] at ({content_x} in, {content_y} in){{\n")
                         f.write(f"\t\t\\input{{{label_path}}}\n")
                         f.write("\t};\n")

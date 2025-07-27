@@ -198,8 +198,10 @@ class DiscogsLibraryMirror:
         # create qr code with cover background
         generate_qr_code_advanced(self.release_folder, release_id, metadata)
         
-        # create latex label
+        # create latex labels (both variants)
         create_latex_label_file(self.release_folder, metadata)
+        from latex_generator import create_latex_label_alternative
+        create_latex_label_alternative(self.release_folder, metadata)
         
         # yt_searcher.search_release_tracks(release_id, metaData, self.release_folder )
 

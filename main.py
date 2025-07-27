@@ -23,11 +23,11 @@ def main():
     logger.separator("Starting Discogs Library Sync")
     
     
-    # library_mirror.sync_releases()
+    library_mirror.sync_releases()
     # library_mirror.sync_single_release(65923)
+    # library_mirror.sync_single_release(96648)
     
     logger.separator()
-    library_mirror.sync_single_release(96648)
     
     # Ende des Prozesses - berechne die Dauer
     end_time = time.time()
