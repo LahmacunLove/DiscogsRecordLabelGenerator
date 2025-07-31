@@ -124,16 +124,22 @@ class DiscogsGUI:
         
         # Mode selection
         self.mode_var = tk.StringVar(value="full")
+        self.mode_var.trace('w', self.on_mode_change)  # Add callback for mode changes
+        
         ttk.Radiobutton(options_frame, text="Full Sync (Complete Collection)", 
                        variable=self.mode_var, value="full").grid(row=0, column=0, sticky=tk.W)
         ttk.Radiobutton(options_frame, text="Development Mode (First 10 releases)", 
                        variable=self.mode_var, value="dev").grid(row=1, column=0, sticky=tk.W)
         ttk.Radiobutton(options_frame, text="Dry Run (Offline processing)", 
                        variable=self.mode_var, value="dryrun").grid(row=2, column=0, sticky=tk.W)
+        ttk.Radiobutton(options_frame, text="Download Only (No analysis/labels)", 
+                       variable=self.mode_var, value="download_only").grid(row=3, column=0, sticky=tk.W)
+        ttk.Radiobutton(options_frame, text="Generate Labels Only (Combine existing LaTeX)", 
+                       variable=self.mode_var, value="labels_only").grid(row=4, column=0, sticky=tk.W)
         
         # Custom limit
         limit_frame = ttk.Frame(options_frame)
-        limit_frame.grid(row=3, column=0, sticky=tk.W, pady=(5, 0))
+        limit_frame.grid(row=5, column=0, sticky=tk.W, pady=(5, 0))
         
         ttk.Radiobutton(limit_frame, text="Custom Limit:", 
                        variable=self.mode_var, value="custom").grid(row=0, column=0)
@@ -147,9 +153,18 @@ class DiscogsGUI:
         self.regenerate_waveforms_var = tk.BooleanVar()
         
         ttk.Checkbutton(options_frame, text="Regenerate LaTeX Labels", 
-                       variable=self.regenerate_labels_var).grid(row=4, column=0, sticky=tk.W, pady=(10, 0))
+                       variable=self.regenerate_labels_var).grid(row=6, column=0, sticky=tk.W, pady=(10, 0))
         ttk.Checkbutton(options_frame, text="Regenerate Waveforms", 
-                       variable=self.regenerate_waveforms_var).grid(row=5, column=0, sticky=tk.W)
+                       variable=self.regenerate_waveforms_var).grid(row=7, column=0, sticky=tk.W)
+        
+        # Label generation options (only shown when labels_only mode is selected)
+        self.labels_dev_var = tk.BooleanVar()
+        self.labels_dev_check = ttk.Checkbutton(options_frame, text="Development mode (first 10 labels)", 
+                                               variable=self.labels_dev_var)
+        self.labels_dev_check.grid(row=8, column=0, sticky=tk.W, pady=(5, 0))
+        
+        # Initially hide label-specific options
+        self.labels_dev_check.grid_remove()
         
         # Control Buttons Section
         control_frame = ttk.Frame(main_frame)
@@ -184,6 +199,16 @@ class DiscogsGUI:
         
         # Configure main grid weights
         main_frame.rowconfigure(4, weight=1)
+    
+    def on_mode_change(self, *args):
+        """Handle mode selection changes to show/hide relevant options"""
+        mode = self.mode_var.get()
+        if mode == "labels_only":
+            # Show label-specific options
+            self.labels_dev_check.grid()
+        else:
+            # Hide label-specific options
+            self.labels_dev_check.grid_remove()
     
     def populate_fields(self):
         """Populate fields with current configuration"""
@@ -240,26 +265,43 @@ class DiscogsGUI:
         self.save_config()
         
         # Build command
-        cmd = [sys.executable, "main.py"]
-        
         mode = self.mode_var.get()
-        if mode == "dev":
-            cmd.append("--dev")
-        elif mode == "dryrun":
-            cmd.append("--dryrun")
-        elif mode == "custom":
-            try:
-                limit = int(self.limit_var.get())
-                cmd.extend(["--max", str(limit)])
-            except ValueError:
-                messagebox.showerror("Error", "Custom limit must be a number!")
-                return
         
-        if self.regenerate_labels_var.get():
-            cmd.append("--regenerate-labels")
-        
-        if self.regenerate_waveforms_var.get():
-            cmd.append("--regenerate-waveforms")
+        if mode == "labels_only":
+            # Use generate_labels.py for labels-only mode
+            cmd = [sys.executable, "generate_labels.py"]
+            
+            # Add development mode for labels if selected
+            if self.labels_dev_var.get():
+                cmd.append("--dev")
+            
+        else:
+            # Use main.py for all other modes
+            cmd = [sys.executable, "main.py"]
+            
+            # Add GUI mode for progress reporting (for full sync only)
+            if mode == "full":
+                cmd.append("--gui-mode")
+            
+            if mode == "dev":
+                cmd.append("--dev")
+            elif mode == "dryrun":
+                cmd.append("--dryrun")
+            elif mode == "download_only":
+                cmd.append("--download-only")
+            elif mode == "custom":
+                try:
+                    limit = int(self.limit_var.get())
+                    cmd.extend(["--max", str(limit)])
+                except ValueError:
+                    messagebox.showerror("Error", "Custom limit must be a number!")
+                    return
+            
+            if self.regenerate_labels_var.get():
+                cmd.append("--regenerate-labels")
+            
+            if self.regenerate_waveforms_var.get():
+                cmd.append("--regenerate-waveforms")
         
         # Clear log and start processing
         self.log_text.delete(1.0, tk.END)
@@ -269,8 +311,16 @@ class DiscogsGUI:
         self.is_processing = True
         self.start_button.config(state=tk.DISABLED)
         self.stop_button.config(state=tk.NORMAL)
-        self.progress_bar.config(mode="indeterminate")
-        self.progress_bar.start()
+        
+        # Set progress bar mode based on whether we expect progress updates
+        if mode == "full" and not (self.regenerate_labels_var.get() or self.regenerate_waveforms_var.get()):
+            # Full sync mode - use determinate progress bar
+            self.progress_bar.config(mode="determinate")
+            self.progress_var.set(0)
+        else:
+            # Other modes - use indeterminate progress bar
+            self.progress_bar.config(mode="indeterminate")
+            self.progress_bar.start()
         
         # Start processing thread
         thread = threading.Thread(target=self.run_processing, args=(cmd,))
@@ -294,7 +344,14 @@ class DiscogsGUI:
             for line in iter(self.process.stdout.readline, ''):
                 if not self.is_processing:  # Check if we should stop
                     break
-                self.message_queue.put(('log', line.rstrip()))
+                
+                line = line.rstrip()
+                
+                # Check for progress updates
+                if line.startswith('GUI_PROGRESS:'):
+                    self.message_queue.put(('progress', line))
+                else:
+                    self.message_queue.put(('log', line))
             
             # Wait for process to complete
             return_code = self.process.wait()
@@ -376,6 +433,25 @@ class DiscogsGUI:
         self.log_text.see(tk.END)
         self.root.update_idletasks()
     
+    def handle_progress_update(self, message):
+        """Handle progress update from subprocess"""
+        try:
+            # Parse: "GUI_PROGRESS: 45.2% (5/11) - Processing releases"
+            if message.startswith('GUI_PROGRESS:'):
+                progress_part = message.split(':', 1)[1].strip()
+                percentage_part = progress_part.split('%')[0].strip()
+                percentage = float(percentage_part)
+                
+                # Update progress bar
+                self.progress_var.set(percentage)
+                
+                # Also log the progress message
+                self.log_message(f"📊 {progress_part}")
+                
+        except (ValueError, IndexError) as e:
+            # If parsing fails, just log the original message
+            self.log_message(message)
+    
     def check_queue(self):
         """Check message queue for updates from processing thread"""
         try:
@@ -384,6 +460,8 @@ class DiscogsGUI:
                 
                 if msg_type == 'log':
                     self.log_message(message)
+                elif msg_type == 'progress':
+                    self.handle_progress_update(message)
                 elif msg_type == 'success' or msg_type == 'error':
                     self.log_message(message)
                 elif msg_type == 'finished':

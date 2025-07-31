@@ -74,49 +74,49 @@ class analyzeAudioFileOrStream:
         
     def get_ffmpeg_command(self):
         """
-        Gibt den vollständigen Pfad zum ffmpeg-Befehl zurück, falls vorhanden.
-        Gibt None zurück, wenn ffmpeg nicht installiert oder nicht im PATH ist.
+        Returns the full path to the ffmpeg command if available.
+        Returns None if ffmpeg is not installed or not in PATH.
         """
         self.ffmpeg_path = shutil.which("ffmpeg")
         
     def get_gnuplot_path(self):
         """
-        Prüft, ob gnuplot installiert ist. Falls ja, gibt gnuplot zurück, falls nein, gibt None zurück.
+        Checks if gnuplot is installed. If yes, returns gnuplot, if no, returns None.
         
         Returns:
-        - str: Pfad zu gnuplot oder None
+        - str: Path to gnuplot or None
         """
         self.gnuplot_path = shutil.which("gnuplot")
         
 
     def readAudioFile(self, ffmpegUsage=False):
-        # Prüfen, ob Datei existiert
+        # Check if file exists
         if not os.path.isfile(self.fileOrStream):
-            raise FileNotFoundError(f"Datei nicht gefunden: {self.fileOrStream}")
+            raise FileNotFoundError(f"File not found: {self.fileOrStream}")
         
         if self.debug:
-            print(f"Lade Datei: {self.fileOrStream}")
+            print(f"Loading file: {self.fileOrStream}")
         
-        # Audio laden
+        # Load audio
         if ffmpegUsage and hasattr(self, 'ffmpeg_path') and self.ffmpeg_path is not None:
-            print("nutze ffmpeg")
+            print("using ffmpeg")
             
             ffmpeg_cmd = [
                 'ffmpeg',
                 '-i', self.fileOrStream,
-                '-f', 'f32le',       # 32-bit float little endian (librosa-kompatibel)
+                '-f', 'f32le',       # 32-bit float little endian (librosa-compatible)
                 '-acodec', 'pcm_f32le',
-                '-ar', str(self.sampleRate),      # Ziel-Samplerate (optional)
+                '-ar', str(self.sampleRate),      # Target sample rate (optional)
                 '-ac', '1',          # Mono
                 '-hide_banner',
                 '-loglevel', 'error',
                 '-'
             ]
             
-            # FFmpeg starten und den Audio-Stream einlesen
+            # Start FFmpeg and read the audio stream
             process = subprocess.Popen(ffmpeg_cmd, stdout=subprocess.PIPE)
             
-            # Audio-Rohdaten in NumPy-Array laden
+            # Load raw audio data into NumPy array
             self.rawAudioStream = process.stdout.read()
             self.audioData = np.frombuffer(self.rawAudioStream, dtype=np.float32)
             # self.duration = librosa.get_duration(y=self.audioData, sr=self.sampleRate)
@@ -128,20 +128,20 @@ class analyzeAudioFileOrStream:
 
         
         if self.debug:
-            print(f"Datei geladen. Länge: {self.duration:.2f} Sekunden")
+            print(f"File loaded. Length: {self.duration:.2f} seconds")
 
             
     def plotWaveform(self):
         if self.audioData is None:
-            raise RuntimeError("Audio wurde noch nicht geladen.")
+            raise RuntimeError("Audio has not been loaded yet.")
 
-        # Zeitachse in Sekunden berechnen
-        zeit = np.arange(len(self.audioData)) / self.sampleRate
+        # Calculate time axis in seconds
+        time_axis = np.arange(len(self.audioData)) / self.sampleRate
 
         plt.figure(figsize=(12, 4))
-        plt.plot(zeit, self.audioData, color='black')
+        plt.plot(time_axis, self.audioData, color='black')
         
-        # Keine Achsen, kein Rahmen, kein Grid
+        # No axes, no frame, no grid
         plt.axis('off')
         plt.gca().set_frame_on(False)
         
@@ -152,23 +152,23 @@ class analyzeAudioFileOrStream:
         plt.show()
 
         if self.debug:
-            print(f"Waveform geplottet: Länge {len(self.audioData)} Samples, Dauer {zeit[-1]:.2f} Sekunden")
+            print(f"Waveform plotted: Length {len(self.audioData)} samples, Duration {time_axis[-1]:.2f} seconds")
     
     def generate_waveform_gnuplot(self):
-        """Generiert Waveform mit gnuplot (schnellste Methode aus altem Code)"""
+        """Generates waveform with gnuplot (fastest method from old code)"""
         if not hasattr(self, 'gnuplot_path') or self.gnuplot_path is None:
             logger.warning("gnuplot not found in PATH - skipping waveform generation")
             return False
             
-        # Prüfe ob Audio-Datei existiert
+        # Check if audio file exists
         if not os.path.isfile(self.fileOrStream):
             logger.error(f"Audio file not found: {self.fileOrStream}")
             return False
             
-        # Pfad für Waveform-PNG
+        # Path for waveform PNG
         waveform_file = os.path.splitext(self.fileOrStream)[0] + "_waveform.png"
         
-        # Prüfe ob bereits existiert
+        # Check if already exists
         if os.path.exists(waveform_file):
             logger.debug(f"Waveform already exists: {os.path.basename(waveform_file)}")
             return True
@@ -176,7 +176,7 @@ class analyzeAudioFileOrStream:
         try:
             logger.process(f"Generating waveform with gnuplot: {os.path.basename(waveform_file)}")
             
-            # FFmpeg für PCM-Daten (16-bit für gnuplot)
+            # FFmpeg for PCM data (16-bit for gnuplot)
             ffmpeg_command = [
                 "ffmpeg", "-i", self.fileOrStream,
                 "-ac", "1", 
@@ -188,7 +188,7 @@ class analyzeAudioFileOrStream:
                 '-'
             ]
             
-            # Gnuplot-Script-Pfad (korrekt für src/ Struktur)
+            # Gnuplot script path (correct for src/ structure)
             gnuplot_script_path = os.path.join(os.path.dirname(__file__), "waveform.gnuplot")
             if not os.path.exists(gnuplot_script_path):
                 logger.error(f"Gnuplot script not found: {gnuplot_script_path}")
@@ -196,16 +196,16 @@ class analyzeAudioFileOrStream:
                 logger.debug(f"__file__ directory: {os.path.dirname(__file__)}")
                 return False
             
-            # Erstelle temporäres gnuplot-Script mit korrektem Output-Pfad
+            # Create temporary gnuplot script with correct output path
             import tempfile
             temp_script = tempfile.NamedTemporaryFile(mode='w', suffix='.gnuplot', delete=False)
             
-            # Lade Original-Script und setze korrekten Output-Pfad
+            # Load original script and set correct output path
             with open(gnuplot_script_path, 'r') as original:
                 script_content = original.read()
             
-            # Ersetze Output-Pfad im Script mit korrektem Gnuplot-Quoting
-            # Gnuplot benötigt double quotes für Pfade mit Sonderzeichen
+            # Replace output path in script with correct gnuplot quoting
+            # Gnuplot requires double quotes for paths with special characters
             gnuplot_safe_path = waveform_file.replace('\\', '\\\\').replace('"', '\\"')
             script_content = script_content.replace(
                 "# Output wird von Command-Line gesetzt\n# set output 'waveform.png';",
@@ -215,21 +215,21 @@ class analyzeAudioFileOrStream:
             temp_script.write(script_content)
             temp_script.close()
             
-            # Gnuplot-Befehl mit temporärem Script
+            # Gnuplot command with temporary script
             gnuplot_command = ['gnuplot', temp_script.name]
             
-            # FFmpeg-Prozess starten
+            # Start FFmpeg process
             ffmpeg_pipe = subprocess.Popen(ffmpeg_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             
-            # Gnuplot-Prozess starten und FFmpeg-Output weiterleiten
+            # Start gnuplot process and forward FFmpeg output
             plot = subprocess.Popen(gnuplot_command, stdin=ffmpeg_pipe.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             
-            # Warten bis beide Prozesse fertig sind
+            # Wait until both processes are finished
             ffmpeg_pipe.stdout.close()
             plot_output, plot_error = plot.communicate()
             ffmpeg_output, ffmpeg_error = ffmpeg_pipe.communicate()
             
-            # Prüfe Ergebnisse
+            # Check results
             if plot.returncode != 0:
                 logger.error(f"Gnuplot error (return code {plot.returncode}): {plot_error.decode()}")
                 return False
@@ -238,10 +238,10 @@ class analyzeAudioFileOrStream:
                 logger.error(f"FFmpeg error (return code {ffmpeg_pipe.returncode}): {ffmpeg_error.decode()}")
                 return False
             
-            # Prüfe ob die Datei erstellt wurde
+            # Check if the file was created
             if os.path.exists(waveform_file) and os.path.getsize(waveform_file) > 0:
                 logger.success(f"Waveform generated: {os.path.basename(waveform_file)}")
-                # Cleanup temporäres Script
+                # Cleanup temporary script
                 try:
                     os.unlink(temp_script.name)
                 except:
@@ -253,7 +253,7 @@ class analyzeAudioFileOrStream:
                     logger.debug(f"Gnuplot stderr: {plot_error.decode()}")
                 if ffmpeg_error:
                     logger.debug(f"FFmpeg stderr: {ffmpeg_error.decode()}")
-                # Cleanup temporäres Script
+                # Cleanup temporary script
                 try:
                     os.unlink(temp_script.name)
                 except:
@@ -262,7 +262,7 @@ class analyzeAudioFileOrStream:
                 
         except Exception as e:
             logger.error(f"Error generating waveform: {e}")
-            # Cleanup temporäres Script
+            # Cleanup temporary script
             try:
                 os.unlink(temp_script.name)
             except:
@@ -270,6 +270,6 @@ class analyzeAudioFileOrStream:
             return False
     
     def generate_waveform(self):
-        """Generiert Waveform mit gnuplot (einzige Methode)"""
+        """Generates waveform with gnuplot (only method)"""
         return self.generate_waveform_gnuplot()
     

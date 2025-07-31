@@ -3,8 +3,8 @@
 """
 QR Code Generator for Discogs Releases
 
-Erstellt QR-Codes mit Cover-Hintergrund für Discogs-Releases
-Basierend auf der originalen createQRCode Funktion mit modernen Verbesserungen
+Creates QR codes with cover background for Discogs releases
+Based on the original createQRCode function with modern improvements
 
 @author: ffx
 """
@@ -15,18 +15,18 @@ from logger import logger
 
 def generate_qr_code(release_folder, release_id, cover_file=None):
     """
-    Generiert sowohl einfache als auch künstlerische QR-Codes für ein Discogs Release
+    Generates both simple and artistic QR codes for a Discogs release
     
     Args:
-        release_folder: Pfad zum Release-Ordner
+        release_folder: Path to the release folder
         release_id: Discogs Release ID
-        cover_file: Pfad zum Cover-Bild (optional, wird automatisch gesucht)
+        cover_file: Path to cover image (optional, automatically searched)
     
     Returns:
-        bool: True wenn erfolgreich, False bei Fehlern
+        bool: True if successful, False on errors
     """
     
-    # Prüfe ob segno verfügbar ist, fallback auf qrcode
+    # Check if segno is available, fallback to qrcode
     try:
         import segno
         return _generate_qr_segno_both(release_folder, release_id, cover_file)
@@ -42,26 +42,26 @@ def generate_qr_code(release_folder, release_id, cover_file=None):
             return False
 
 def _generate_qr_segno_both(release_folder, release_id, cover_file=None):
-    """Segno-basierte QR-Code Generierung - erstellt sowohl einfache als auch künstlerische QR-Codes"""
+    """Segno-based QR code generation - creates both simple and artistic QR codes"""
     import segno
     
     qr_file = os.path.join(release_folder, 'qrcode.png')
     qr_fancy_file = os.path.join(release_folder, 'qrcode_fancy.png')
     
-    # Finde Cover-Datei falls nicht angegeben
+    # Find cover file if not specified
     if not cover_file:
         cover_file = os.path.join(release_folder, 'cover.jpg')
     
     try:
         logger.process(f"Generating QR codes with segno for release {release_id}")
         
-        # Erstelle QR-Code mit Discogs-URL
+        # Create QR code with Discogs URL
         discogs_url = f'https://discogs.com/release/{release_id}'
         qr_code = segno.make_qr(discogs_url, error='l')
         
         success = False
         
-        # 1. Erstelle einfachen QR-Code (immer)
+        # 1. Create simple QR code (always)
         if not os.path.exists(qr_file):
             logger.debug("Creating simple QR code with segno")
             qr_code.save(
@@ -77,7 +77,7 @@ def _generate_qr_segno_both(release_folder, release_id, cover_file=None):
             logger.debug(f"Simple QR code already exists: {os.path.basename(qr_file)}")
             success = True
         
-        # 2. Erstelle künstlerischen QR-Code mit Cover (falls möglich)
+        # 2. Create artistic QR code with cover (if possible)
         if not os.path.exists(qr_fancy_file) and os.path.exists(cover_file) and hasattr(qr_code, 'to_artistic'):
             try:
                 logger.debug(f"Creating fancy QR code with cover: {os.path.basename(cover_file)}")
@@ -106,25 +106,25 @@ def _generate_qr_segno(release_folder, release_id, cover_file=None):
     return _generate_qr_segno_both(release_folder, release_id, cover_file)
 
 def _generate_qr_standard(release_folder, release_id, cover_file=None):
-    """Standard qrcode Library mit PIL für Cover-Integration"""
+    """Standard qrcode library with PIL for cover integration"""
     import qrcode
     from PIL import Image, ImageDraw
     
     qr_file = os.path.join(release_folder, 'qrcode.png')
     
-    # Prüfe ob QR-Code bereits existiert
+    # Check if QR code already exists
     if os.path.exists(qr_file):
         logger.debug(f"QR code already exists: {os.path.basename(qr_file)}")
         return True
     
-    # Finde Cover-Datei falls nicht angegeben
+    # Find cover file if not specified
     if not cover_file:
         cover_file = os.path.join(release_folder, 'cover.jpg')
     
     try:
         logger.process(f"Generating QR code with qrcode library for release {release_id}")
         
-        # Erstelle QR-Code mit Discogs-URL
+        # Create QR code with Discogs URL
         discogs_url = f'https://discogs.com/release/{release_id}'
         qr = qrcode.QRCode(
             version=1,
@@ -135,32 +135,32 @@ def _generate_qr_standard(release_folder, release_id, cover_file=None):
         qr.add_data(discogs_url)
         qr.make(fit=True)
         
-        # Erstelle QR-Code Bild
+        # Create QR code image
         qr_img = qr.make_image(fill_color="black", back_color="white")
         
-        # Falls Cover vorhanden, integriere es in den QR-Code
+        # If cover is available, integrate it into the QR code
         if os.path.exists(cover_file):
             logger.debug(f"Integrating cover as center logo: {os.path.basename(cover_file)}")
             
-            # Lade Cover
+            # Load cover
             cover = Image.open(cover_file)
             
-            # Berechne Logo-Größe (ca. 1/5 der QR-Code Größe)
+            # Calculate logo size (approximately 1/5 of QR code size)
             qr_width, qr_height = qr_img.size
             logo_size = min(qr_width, qr_height) // 5
             
-            # Resize Cover zu Logo
+            # Resize cover to logo
             cover = cover.resize((logo_size, logo_size), Image.Resampling.LANCZOS)
             
-            # Erstelle weißen Rahmen um Logo für bessere Lesbarkeit
+            # Create white border around logo for better readability
             logo_with_border = Image.new('RGB', (logo_size + 20, logo_size + 20), 'white')
             logo_with_border.paste(cover, (10, 10))
             
-            # Berechne Position für Logo (Zentrum)
+            # Calculate position for logo (center)
             logo_pos = ((qr_width - logo_with_border.width) // 2, 
                        (qr_height - logo_with_border.height) // 2)
             
-            # Füge Logo zum QR-Code hinzu
+            # Add logo to QR code
             qr_img.paste(logo_with_border, logo_pos)
             
             logger.success(f"QR code with cover logo created: {os.path.basename(qr_file)}")
@@ -168,7 +168,7 @@ def _generate_qr_standard(release_folder, release_id, cover_file=None):
             logger.debug("No cover found - creating simple QR code")
             logger.success(f"Simple QR code created: {os.path.basename(qr_file)}")
         
-        # Speichere QR-Code
+        # Save QR code
         qr_img.save(qr_file)
         
         return True
@@ -179,22 +179,22 @@ def _generate_qr_standard(release_folder, release_id, cover_file=None):
 
 def generate_qr_code_advanced(release_folder, release_id, metadata=None):
     """
-    Erweiterte QR-Code Generation mit Fallback zwischen Libraries
+    Advanced QR code generation with fallback between libraries
     
     Args:
-        release_folder: Pfad zum Release-Ordner  
+        release_folder: Path to release folder  
         release_id: Discogs Release ID
-        metadata: Optional - Release-Metadaten für erweiterte QR-Codes
+        metadata: Optional - Release metadata for advanced QR codes
         
     Returns:
-        bool: True wenn erfolgreich, False bei Fehlern
+        bool: True if successful, False on errors
     """
     
-    # Nutze automatischen Fallback zwischen segno und qrcode
+    # Use automatic fallback between segno and qrcode
     return generate_qr_code(release_folder, release_id)
 
 def check_qr_dependencies():
-    """Prüft ob QR-Code Dependencies verfügbar sind"""
+    """Checks if QR code dependencies are available"""
     try:
         import segno
         logger.info("✅ segno library available for QR code generation")

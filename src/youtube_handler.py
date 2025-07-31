@@ -12,7 +12,7 @@ import threading
 from utils import sanitize_filename
 
 def _analyze_track_standalone(task):
-    """Standalone-Funktion für parallele Track-Analyse"""
+    """Standalone function for parallel track analysis"""
     import time
     import os
     from analyzeSoundFile import analyzeAudioFileOrStream
@@ -21,6 +21,7 @@ def _analyze_track_standalone(task):
     audio_file = task['audio_file']
     track_filename_base = task['track_filename_base']
     track_position = task['track_position']
+    release_info = task.get('release_info', 'Unknown Release')
     
     try:
         start_time = time.time()
@@ -32,6 +33,7 @@ def _analyze_track_standalone(task):
         waveform_needed = not os.path.exists(waveform_file)
         
         if not analysis_needed and not waveform_needed:
+            logger.debug(f"[{release_info}] Track {track_position} already analyzed")
             return {
                 'track': track_position,
                 'success': True,
@@ -39,7 +41,7 @@ def _analyze_track_standalone(task):
                 'error': 'Already analyzed'
             }
         
-        # Erstelle Analyzer
+        # Create analyzer
         analyzer = analyzeAudioFileOrStream(
             fileOrStream=audio_file,
             sampleRate=44100,
@@ -49,19 +51,24 @@ def _analyze_track_standalone(task):
             debug=False
         )
         
-        # Führe Essentia-Analyse durch
+        logger.analyze(f"[{release_info}] Analyzing track {track_position}")
+        
+        # Perform Essentia analysis
         if analysis_needed:
+            logger.process(f"[{release_info}] Running Essentia analysis for track {track_position}")
             analyzer.readAudioFile(ffmpegUsage=False)
             analyzer.analyzeMusicExtractor()
         
-        # Führe Waveform-Generierung durch
+        # Perform waveform generation
         if waveform_needed:
             try:
+                logger.process(f"[{release_info}] Generating waveform for track {track_position}")
                 analyzer.generate_waveform_gnuplot()
             except Exception as e:
-                logger.warning(f"Waveform generation failed for {track_position}: {e}")
+                logger.warning(f"[{release_info}] Waveform generation failed for track {track_position}: {e}")
         
         duration = time.time() - start_time
+        logger.success(f"[{release_info}] Track {track_position} analysis completed in {duration:.2f}s")
         return {
             'track': track_position,
             'success': True,
@@ -70,6 +77,7 @@ def _analyze_track_standalone(task):
         }
         
     except Exception as e:
+        logger.error(f"[{release_info}] Track {track_position} analysis failed: {e}")
         return {
             'track': track_position,
             'success': False,
@@ -121,17 +129,17 @@ class YouTubeMatcher:
         self.youtube_release_metadata = []
         
         if len(video_urls) <= 1:
-            # Für einzelne URLs normal verarbeiten
+            # Process single URLs normally
             for url in video_urls:
                 toAppend = self.fetch_single_metadata(url)
                 if toAppend["title"] is not None:
                     self.youtube_release_metadata.append(toAppend)
         else:
-            # Parallele Verarbeitung für mehrere URLs
+            # Parallel processing for multiple URLs
             logger.process(f"Fetching metadata for {len(video_urls)} YouTube videos in parallel...")
             
             with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-                # Starte alle Metadaten-Abrufe parallel
+                # Start all metadata fetches in parallel
                 future_to_url = {executor.submit(self.fetch_single_metadata, url): url for url in video_urls}
                 
                 for future in concurrent.futures.as_completed(future_to_url):
@@ -177,11 +185,11 @@ class YouTubeMatcher:
             # Score-Matrix (initial 0)
             score_matrix = np.zeros((num_tracks, num_videos))
             
-            # Hilfslisten zum Zugriff später
+            # Helper lists for later access
             track_info = []
             video_info = []
             
-            # Baue Score-Matrix
+            # Build score matrix
             for i, track in enumerate(tracklist):
                 track_title = track['title']
                 track_duration = self.duration_to_seconds(track['duration'])
@@ -204,16 +212,16 @@ class YouTubeMatcher:
                     else:
                         score = title_score + title_artist_score
             
-                    score_matrix[i][j] = -score  # Achtung: scipy sucht Minimum → wir negieren
+                    score_matrix[i][j] = -score  # Note: scipy searches for minimum → we negate
             
-            # Optimales Matching berechnen
+            # Calculate optimal matching
             track_indices, video_indices = linear_sum_assignment(score_matrix)
             
-            # Ergebnis speichern
+            # Save results
             for i, j in zip(track_indices, video_indices):
                 track_title, track_duration, track_position = track_info[i]
                 matched_video = video_info[j]
-                final_score = -score_matrix[i][j]  # wieder positiv machen
+                final_score = -score_matrix[i][j]  # make positive again
             
                 self.matches.append({
                     'discogs_track': track_title,
@@ -223,24 +231,24 @@ class YouTubeMatcher:
                     'match_score': round(final_score, 3)
                 })
 
-            # Speichern als JSON
+            # Save as JSON
             with open(os.path.join(self.release_folder,"yt_matches.json"), "w", encoding="utf-8") as f:
                 json.dump(self.matches, f, indent=2, ensure_ascii=False)
         
-        # Aktualisiere Original-Metadaten mit YouTube-Dauern falls Discogs-Dauer fehlt
+        # Update original metadata with YouTube durations if Discogs duration is missing
         self.update_metadata_with_youtube_durations()
             
         return
     
     def update_metadata_with_youtube_durations(self):
-        """Aktualisiert die Original-Metadaten mit YouTube-Dauern falls Discogs-Dauer fehlt"""
+        """Updates the original metadata with YouTube durations if Discogs duration is missing"""
         metadata_file = os.path.join(self.release_folder, "metadata.json")
         
         if not os.path.exists(metadata_file):
             logger.warning("metadata.json not found - cannot update durations")
             return
             
-        # Lade Original-Metadaten
+        # Load original metadata
         try:
             with open(metadata_file, 'r', encoding='utf-8') as f:
                 metadata = json.load(f)
@@ -248,33 +256,33 @@ class YouTubeMatcher:
             logger.error(f"Error loading metadata.json: {e}")
             return
             
-        # Erstelle ein Mapping von Track-Position zu YouTube-Dauer
+        # Create a mapping from track position to YouTube duration
         youtube_durations = {}
         for match in self.matches:
             track_pos = match.get('track_position')
             youtube_match = match.get('youtube_match')
             if track_pos and youtube_match and youtube_match.get('length'):
-                # Konvertiere Sekunden zu MM:SS Format
+                # Convert seconds to MM:SS format
                 duration_seconds = youtube_match['length']
                 minutes = duration_seconds // 60
                 seconds = duration_seconds % 60
                 duration_str = f"{minutes}:{seconds:02d}"
                 youtube_durations[track_pos] = duration_str
         
-        # Aktualisiere Tracks mit fehlenden Dauern
+        # Update tracks with missing durations
         updated_count = 0
         for track in metadata.get('tracklist', []):
             track_pos = track.get('position')
             current_duration = track.get('duration')
             
-            # Wenn keine Dauer oder leere Dauer vorhanden ist
+            # If no duration or empty duration is present
             if track_pos and (not current_duration or current_duration.strip() == ''):
                 if track_pos in youtube_durations:
                     track['duration'] = youtube_durations[track_pos]
                     updated_count += 1
                     logger.info(f"Updated track {track_pos} duration: {youtube_durations[track_pos]} (from YouTube)")
         
-        # Speichere aktualisierte Metadaten falls Änderungen vorgenommen wurden
+        # Save updated metadata if changes were made
         if updated_count > 0:
             try:
                 with open(metadata_file, 'w', encoding='utf-8') as f:
@@ -353,27 +361,102 @@ class YouTubeMatcher:
         
         # Analysis phase - parallel analysis of all downloaded tracks
         if downloaded_tracks:
-            logger.info(f"Download phase complete. Starting parallel analysis for {len(downloaded_tracks)} tracks...")
+            release_folder_name = os.path.basename(self.release_folder)
+            logger.info(f"[{release_folder_name}] Download phase complete. Starting parallel analysis for {len(downloaded_tracks)} tracks...")
             self._parallel_audio_analysis(downloaded_tracks)
         
-        logger.success(f"Audio download and analysis completed for {len(downloaded_tracks)} tracks")
+        release_folder_name = os.path.basename(self.release_folder)
+        logger.success(f"[{release_folder_name}] Audio download and analysis completed for {len(downloaded_tracks)} tracks")
+        return
+    
+    def audio_download_only(self, release_metadata):
+        """Downloads audio for matched tracks without analysis (download-only mode)"""
+        
+        ytdl_opts = {
+            'quiet': False,  # Enable output for debugging
+            'skip_download': False,
+            'nocheckcertificate': True,
+            'format': 'bestaudio/best',
+            'extractaudio': True,
+            'audioformat': 'opus',
+            'outtmpl': '%(title)s.%(ext)s',  # Will be overridden per track
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'opus',
+                'preferredquality': '192',
+            }],
+            'ignoreerrors': True,  # Continue on errors
+        }
+        
+        # Download phase - without analysis
+        downloaded_tracks = []
+        release_folder_name = os.path.basename(self.release_folder)
+        
+        for i, match in enumerate(self.matches):
+            if match["youtube_match"] is None:
+                logger.warning(f"[{release_folder_name}] No YouTube match for track {match.get('track_position', i)}")
+                continue
+                
+            # Ensure track position is set
+            if match["track_position"] is None:
+                match["track_position"] = str(i + 1)
+                
+            # Update duration if missing
+            if self.matches[i]["discogs_duration"] is None:
+                self.matches[i]["discogs_duration"] = match["youtube_match"]["length"]
+            
+            track_position = match["track_position"]
+            track_filename_base = os.path.join(self.release_folder, sanitize_filename(track_position))
+            
+            # Check if audio file already exists
+            existing_file = self.get_downloaded_audio_file(track_filename_base)
+            if existing_file:
+                logger.info(f"[{release_folder_name}] Audio file already exists for track {track_position}: {os.path.basename(existing_file)}")
+                downloaded_tracks.append((track_filename_base, track_position))
+                continue
+            
+            url = match["youtube_match"]["url"]
+            ytdl_opts['outtmpl'] = track_filename_base + '.%(ext)s'
+            
+            try:
+                logger.process(f"[{release_folder_name}] Downloading audio for track {track_position}: {match['discogs_track']}")
+                
+                with YoutubeDL(ytdl_opts) as ydl:
+                    info = ydl.extract_info(url, download=True)
+                    
+                # Verify download completed
+                downloaded_file = self.get_downloaded_audio_file(track_filename_base)
+                if downloaded_file:
+                    logger.success(f"[{release_folder_name}] Downloaded: {os.path.basename(downloaded_file)}")
+                    downloaded_tracks.append((track_filename_base, track_position))
+                else:
+                    logger.error(f"[{release_folder_name}] Download failed for track {track_position} - no file found")
+                    
+            except Exception as e:
+                logger.error(f"[{release_folder_name}] Download error for track {track_position}: {e}")
+                continue
+        
+        logger.success(f"[{release_folder_name}] Audio download completed for {len(downloaded_tracks)} tracks (no analysis)")
         return
     
     def _parallel_audio_analysis(self, downloaded_tracks):
-        """Führt parallele Audio-Analyse mit ProcessPoolExecutor durch (optimiert für CPU-bound tasks)"""
+        """Performs parallel audio analysis using ProcessPoolExecutor (optimized for CPU-bound tasks)"""
         import concurrent.futures
         import time
         
-        # Optimale Prozess-Anzahl für CPU-intensive Essentia-Analyse
-        # Nutze 80% der CPU-Kerne, aber nicht mehr als Tracks vorhanden sind
+        # Get release info for logging context
+        release_folder_name = os.path.basename(self.release_folder)
+        
+        # Optimal number of processes for CPU-intensive Essentia analysis
+        # Use 80% of CPU cores, but not more than available tracks
         cpu_cores = os.cpu_count() or 2
-        optimal_workers = max(1, int(cpu_cores * 0.8))  # 80% der Kerne für bessere Systemstabilität
+        optimal_workers = max(1, int(cpu_cores * 0.8))  # 80% of cores for better system stability
         max_workers = min(len(downloaded_tracks), optimal_workers)
         
-        logger.info(f"🔄 Starting parallel analysis with {max_workers}/{cpu_cores} processes (ProcessPoolExecutor)")
+        logger.info(f"🔄 [{release_folder_name}] Starting parallel analysis with {max_workers}/{cpu_cores} processes")
         analysis_start = time.time()
         
-        # Bereite Daten für parallele Verarbeitung vor
+        # Prepare data for parallel processing
         analysis_tasks = []
         for track_filename_base, track_position in downloaded_tracks:
             audio_file = self.get_downloaded_audio_file(track_filename_base)
@@ -381,22 +464,23 @@ class YouTubeMatcher:
                 analysis_tasks.append({
                     'audio_file': audio_file,
                     'track_filename_base': track_filename_base,
-                    'track_position': track_position
+                    'track_position': track_position,
+                    'release_info': release_folder_name
                 })
         
         if not analysis_tasks:
             logger.warning("No audio files found for analysis")
             return
         
-        # Verwende ProcessPoolExecutor für CPU-intensive Essentia-Analyse
+        # Use ProcessPoolExecutor for CPU-intensive Essentia analysis
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-            # Starte alle Analyse-Tasks
+            # Start all analysis tasks
             future_to_track = {
                 executor.submit(_analyze_track_standalone, task): task['track_position']
                 for task in analysis_tasks
             }
             
-            # Sammle Ergebnisse
+            # Collect results
             results = []
             for future in concurrent.futures.as_completed(future_to_track):
                 track_position = future_to_track[future]
@@ -405,12 +489,13 @@ class YouTubeMatcher:
                     results.append(result)
                     
                     if result['success']:
-                        logger.success(f"✅ Track {result['track']} analyzed in {result['duration']:.2f}s")
+                        if result['error'] != 'Already analyzed':
+                            logger.success(f"✅ [{release_folder_name}] Track {result['track']} analyzed in {result['duration']:.2f}s")
                     else:
-                        logger.error(f"❌ Track {result['track']} failed: {result['error']}")
+                        logger.error(f"❌ [{release_folder_name}] Track {result['track']} failed: {result['error']}")
                         
                 except Exception as e:
-                    logger.error(f"❌ Track {track_position} crashed: {e}")
+                    logger.error(f"❌ [{release_folder_name}] Track {track_position} crashed: {e}")
                     results.append({
                         'track': track_position,
                         'success': False,
@@ -418,13 +503,13 @@ class YouTubeMatcher:
                         'error': f"Execution error: {e}"
                     })
         
-        # Performance-Statistiken
+        # Performance statistics
         total_time = time.time() - analysis_start
         successful = sum(1 for r in results if r['success'])
         failed = len(results) - successful
         avg_time = sum(r['duration'] for r in results if r['success']) / max(successful, 1)
         
-        logger.info(f"📊 Parallel Analysis Results:")
+        logger.info(f"📊 [{release_folder_name}] Parallel Analysis Results:")
         logger.info(f"   ✅ Successful: {successful}/{len(downloaded_tracks)} tracks")
         logger.info(f"   ❌ Failed: {failed} tracks")
         logger.info(f"   ⏱️  Total time: {total_time:.2f}s")
@@ -434,7 +519,7 @@ class YouTubeMatcher:
 
 
     def download_and_stream_audio(self, youtube_url, output_path="output.ogg"):
-        # 1. Nur Info extrahieren, keine Datei speichern
+        # 1. Extract info only, don't save file
         ytdl_opts = {
             'quiet': True,
             'format': 'bestaudio/best',
@@ -447,7 +532,7 @@ class YouTubeMatcher:
             stream_url = info['url']
             logger.debug(f"Direct stream URL: {stream_url}")
         
-        # 2. ffmpeg: PCM + Save als OGG gleichzeitig
+        # 2. ffmpeg: PCM + Save as OGG simultaneously
         ffmpeg_cmd = [
             'ffmpeg',
             '-i', stream_url,
@@ -458,8 +543,8 @@ class YouTubeMatcher:
             '-f', 'f32le',           # PCM: 32-bit float little endian
             '-acodec', 'pcm_f32le',
             '-ac', '1',              # Mono
-            '-ar', '22050',          # Sample rate für librosa (kleiner = schneller)
-            'pipe:1'                 # PCM an stdout
+            '-ar', '22050',          # Sample rate for librosa (smaller = faster)
+            'pipe:1'                 # PCM to stdout
         ]
              
         logger.process("Running ffmpeg...")
@@ -470,11 +555,11 @@ class YouTubeMatcher:
             stderr=subprocess.DEVNULL
         )
          
-        # 3. PCM-Daten lesen & in NumPy-Array umwandeln
+        # 3. Read PCM data & convert to NumPy array
         raw_audio = process.stdout.read()
         audio_array = np.frombuffer(raw_audio, dtype=np.float32)
          
-        # 4. BPM mit librosa berechnen
+        # 4. Calculate BPM with librosa
         logger.analyze("Analyzing BPM...")
         tempo, _ = librosa.beat.beat_track(y=audio_array, sr=22050)
         logger.info(f"Estimated BPM: {round(tempo)}")
@@ -485,16 +570,16 @@ class YouTubeMatcher:
         return round(tempo)
     
     def analyze_downloaded_track(self, track_filename_base, track_position):
-        """Analysiert einen heruntergeladenen Track mit Essentia"""
+        """Analyzes a downloaded track with Essentia"""
         try:
-            # Finde die tatsächlich heruntergeladene Datei
+            # Find the actually downloaded file
             audio_file = self.get_downloaded_audio_file(track_filename_base)
             
             if not audio_file:
                 logger.warning(f"No audio file found for track {track_position}")
                 return False
             
-            # Prüfe welche Analysen noch fehlen
+            # Check which analyses are still missing
             json_file = f"{track_filename_base}.json"
             waveform_file = f"{track_filename_base}_waveform.png"
             
@@ -505,7 +590,7 @@ class YouTubeMatcher:
                 logger.info(f"Audio analysis and waveform already exist for track {track_position}")
                 return True
                 
-            # Zeige was noch zu tun ist
+            # Show what still needs to be done
             todo_items = []
             if not analysis_exists:
                 todo_items.append("Essentia analysis")
@@ -513,16 +598,16 @@ class YouTubeMatcher:
                 todo_items.append("waveform generation")
             logger.info(f"Running {', '.join(todo_items)} for track {track_position}")
             
-            # Warte kurz falls Datei noch geschrieben wird
+            # Wait briefly if file is still being written
             import time
             time.sleep(0.5)
             
-            # Prüfe Dateigröße (sollte > 0 sein)
+            # Check file size (should be > 0)
             if os.path.getsize(audio_file) == 0:
                 logger.error(f"Audio file is empty for track {track_position}: {audio_file}")
                 return False
                 
-            # Erstelle Analyzer-Instanz
+            # Create analyzer-Instanz
             analyzer = analyzeAudioFileOrStream(
                 fileOrStream=audio_file,
                 sampleRate=44100,
@@ -534,7 +619,7 @@ class YouTubeMatcher:
             
             success = True
             
-            # Führe Essentia-Analyse durch (falls noch nicht existiert)
+            # Perform Essentia analysis (if not already exists)
             if not analysis_exists:
                 try:
                     logger.analyze(f"Running Essentia analysis: {os.path.basename(audio_file)}")
@@ -545,10 +630,10 @@ class YouTubeMatcher:
                     logger.error(f"Essentia analysis failed for track {track_position}: {e}")
                     success = False
             
-            # Führe Waveform-Generation durch (falls noch nicht existiert)
+            # Perform waveform generation (if not already exists)
             if not waveform_exists:
                 try:
-                    # Waveform-Generierung für alle Tracks mit gnuplot
+                    # Waveform generation for all tracks with gnuplot
                     waveform_success = analyzer.generate_waveform_gnuplot()
                     
                     if waveform_success:
@@ -570,7 +655,7 @@ class YouTubeMatcher:
             return False
             
     def get_downloaded_audio_file(self, track_filename_base):
-        """Findet die heruntergeladene Audio-Datei (yt-dlp fügt verschiedene Erweiterungen hinzu)"""
+        """Finds the downloaded audio file (yt-dlp adds various extensions)"""
         for ext in ['.ogg', '.m4a', '.mp3', '.webm', '.opus']:
             potential_file = f"{track_filename_base}{ext}"
             if os.path.exists(potential_file):

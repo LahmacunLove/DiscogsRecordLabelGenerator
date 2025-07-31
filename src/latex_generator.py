@@ -3,10 +3,10 @@
 """
 LaTeX Label Generator for Discogs Releases
 
-Erstellt LaTeX-basierte Etiketten für Vinyl-Releases mit:
-- Track-Tabelle mit Waveforms, BPM, Key
-- Release-Informationen
-- Optimierte Größenanpassung mit fitbox
+Creates LaTeX-based labels for vinyl releases with:
+- Track table with waveforms, BPM, Key
+- Release information
+- Optimized sizing with fitbox
 
 @author: ffx
 """
@@ -20,13 +20,13 @@ from logger import logger
 from tqdm import tqdm
 
 def unicode_to_latex(text):
-    """Konvertiert Unicode-Zeichen für LaTeX-Kompatibilität"""
+    """Converts Unicode characters for LaTeX compatibility"""
     if pd.isna(text) or text == '':
         return ''
     
     result = str(text)
     
-    # Entferne problematische Unicode-Zeichen ZUERST
+    # Remove problematic Unicode characters FIRST
     invisible_chars = {
         '\u200b': '',  # Zero-width space (U+200B)
         '\u200c': '',  # Zero-width non-joiner (U+200C) 
@@ -39,14 +39,14 @@ def unicode_to_latex(text):
     for char, replacement in invisible_chars.items():
         result = result.replace(char, replacement)
     
-    # Basis-Ersetzungen für LaTeX
-    # WICHTIG: Reihenfolge beachten - backslash ZUERST!
+    # Basic replacements for LaTeX
+    # IMPORTANT: Pay attention to order - backslash FIRST!
     replacements = {
-        '\\': '\\textbackslash{}',  # Backslash ZUERST behandeln
+        '\\': '\\textbackslash{}',  # Handle backslash FIRST
         '&': '\\&',
         '%': '\\%',
         '$': '\\$',
-        '#': '\\#',  # Einfaches # escaping für Tabellen
+        '#': '\\#',  # Simple # escaping for tables
         '^': '\\textasciicircum{}',
         '_': '\\_',
         '{': '\\{',
@@ -62,14 +62,14 @@ def unicode_to_latex(text):
     return result
 
 def musical_key_to_latex(key):
-    """Spezialisierte Funktion für musikalische Tonarten in LaTeX"""
+    """Specialized function for musical keys in LaTeX"""
     if pd.isna(key) or key == '':
         return ''
     
-    # Konvertiere zu String
+    # Convert to string
     result = str(key).strip()
     
-    # Entferne problematische Unicode-Zeichen ZUERST
+    # Remove problematic Unicode characters FIRST
     invisible_chars = {
         '\u200b': '',  # Zero-width space (U+200B)
         '\u200c': '',  # Zero-width non-joiner (U+200C) 
@@ -82,18 +82,18 @@ def musical_key_to_latex(key):
     for char, replacement in invisible_chars.items():
         result = result.replace(char, replacement)
     
-    # Musikalische Notation behandeln (ohne andere LaTeX-Escaping)
+    # Handle musical notation (without other LaTeX escaping)
     import re
     
-    # Behandle "b" als flat nur wenn es nach einem Ton-Buchstaben steht
-    # aber nicht bei "bm" (b-moll) oder "Bm" (B-moll)
-    # Pattern: Tonbuchstabe + b (aber nicht bm)
+    # Treat "b" as flat only when it follows a tone letter
+    # but not for "bm" (b-minor) or "Bm" (B-minor)
+    # Pattern: tone letter + b (but not bm)
     pattern = r'([A-Ga-g])b(?!m)'
     result = re.sub(pattern, r'\1$\\flat$', result)
     
-    # Direkte musikalische Ersetzungen
+    # Direct musical replacements
     musical_replacements = {
-        # Unicode musikalische Symbole
+        # Unicode musical symbols
         '♯': '$\\sharp$',      # Unicode sharp
         '♭': '$\\flat$',       # Unicode flat  
         '♮': '$\\natural$',    # Unicode natural
@@ -102,11 +102,11 @@ def musical_key_to_latex(key):
         '#': '$\\sharp$',
     }
     
-    # Jetzt die direkten Ersetzungen
+    # Now the direct replacements
     for original, replacement in musical_replacements.items():
         result = result.replace(original, replacement)
     
-    # Nur die notwendigsten LaTeX-Escapes für Tonarten (keine backslash-Behandlung)
+    # Only the most necessary LaTeX escapes for keys (no backslash handling)
     final_replacements = {
         '&': '\\&',
         '%': '\\%',
@@ -123,7 +123,7 @@ def musical_key_to_latex(key):
     return result
 
 def inplace_change(filename, old_string, new_string):
-    """Ersetzt Text in einer Datei"""
+    """Replaces text in a file"""
     with open(filename, 'r', encoding='utf-8') as f:
         s = f.read()
     
@@ -136,11 +136,11 @@ def inplace_change(filename, old_string, new_string):
         f.write(s)
 
 def create_latex_label_file(release_folder, metadata):
-    """Erstellt eine LaTeX-Label-Datei für ein Release (Original-Design)"""
+    """Creates a LaTeX label file for a release (original design)"""
     
     label_file = os.path.join(release_folder, 'label.tex')
     
-    # Überschreibe immer - keine Existenz-Prüfung
+    # Always overwrite - no existence check
     # if os.path.exists(label_file):
     #     logger.info(f"LaTeX label already exists: {os.path.basename(label_file)}")
     #     return True
@@ -149,12 +149,12 @@ def create_latex_label_file(release_folder, metadata):
 
 
 def _create_label_original(release_folder, metadata, label_file):
-    """Original Label-Design - basierend auf der ursprünglichen createLatexLabelFile Methode"""
+    """Original label design - based on the original createLatexLabelFile method"""
     
     try:
         logger.process(f"Creating original LaTeX label for release {metadata.get('id', 'unknown')}")
         
-        # Erstelle DataFrame für Tracks (wie im Original)
+        # Create DataFrame for tracks (as in original)
         tracks_data = []
         for track in metadata.get('tracklist', []):
             track_pos = track.get('position', '')
@@ -162,10 +162,10 @@ def _create_label_original(release_folder, metadata, label_file):
             track_artist = track.get('artist', '')
             track_duration = track.get('duration', '')
             
-            # Suche nach Analyse-Daten
+            # Search for analysis data
             track_base = os.path.join(release_folder, track_pos)
             
-            # BPM und Key aus JSON laden (falls vorhanden)
+            # Load BPM and Key from JSON (if available)
             bpm, key = '', ''
             json_file = f"{track_base}.json"
             if os.path.exists(json_file):
@@ -173,23 +173,23 @@ def _create_label_original(release_folder, metadata, label_file):
                     with open(json_file, 'r') as f:
                         analysis_data = json.load(f)
                     
-                    # BPM aus rhythm-Sektion
+                    # BPM from rhythm section
                     bpm_value = analysis_data.get('rhythm', {}).get('bpm', 0)
                     if bpm_value and bpm_value > 0:
                         bpm = str(round(bpm_value))
                     
-                    # Key aus tonal-Sektion (verschiedene Möglichkeiten prüfen)
+                    # Key from tonal section (check various possibilities)
                     tonal_data = analysis_data.get('tonal', {})
                     key_key = tonal_data.get('key_key', '')
                     key_scale = tonal_data.get('key_scale', '')
                     key_temperley = tonal_data.get('key_temperley', {})
                     
-                    # Prüfe verschiedene Key-Quellen
+                    # Check different key sources
                     if key_temperley and isinstance(key_temperley, dict):
                         key_name = key_temperley.get('key', '')
                         key_scale = key_temperley.get('scale', '')
                         if key_name:
-                            # Kombiniere Key + Scale (z.B. "C major" → "C")
+                            # Combine Key + Scale (e.g. "C major" → "C")
                             if 'major' in key_scale.lower():
                                 key = key_name.upper()
                             elif 'minor' in key_scale.lower():
@@ -203,11 +203,11 @@ def _create_label_original(release_folder, metadata, label_file):
                     logger.debug(f"Error parsing analysis data for {track_pos}: {e}")
                     pass
             
-            # Waveform-Pfad (absoluter Pfad wie im Original)
+            # Waveform path (absolute path as in original)
             waveform_path = f"{track_base}_waveform.png"
             waveform_latex = ''
             if os.path.exists(waveform_path):
-                # Absoluter Pfad für LaTeX wie im Original
+                # Absolute path for LaTeX as in original
                 waveform_latex = f'\\includegraphics[width=2cm]{{{os.path.abspath(waveform_path)}}}'
             
             tracks_data.append({
@@ -220,43 +220,43 @@ def _create_label_original(release_folder, metadata, label_file):
                 'waveform': waveform_latex
             })
         
-        # DataFrame erstellen (pandas-basiert wie im Original)
+        # Create DataFrame (pandas-based as in original)
         track_df = pd.DataFrame(tracks_data)
         
-        # NaN-Werte durch leere Strings ersetzen (Original-Verhalten)
+        # Replace NaN values with empty strings (original behavior)
         track_df = track_df.fillna('')
         
-        # Unicode-Konvertierung für LaTeX (applymap wie im Original)
+        # Unicode conversion for LaTeX (applymap as in original)
         for col in ['pos', 'title', 'artist', 'duration', 'bpm']:
             if col in track_df.columns:
                 track_df[col] = track_df[col].apply(unicode_to_latex)
         
-        # Spezielle Behandlung für Key-Spalte mit musikalischer Notation
+        # Special handling for Key column with musical notation
         if 'key' in track_df.columns:
             track_df['key'] = track_df['key'].apply(musical_key_to_latex)
         
-        # Original Various Artists Behandlung
+        # Original Various Artists handling
         unique_artists = track_df['artist'].unique()
         if len(unique_artists) == 1:
-            # Nur ein Artist - verstecke Artist-Spalte (Original-Logik)
+            # Only one artist - hide artist column (original logic)
             columns_to_show = ['pos', 'title', 'duration', 'bpm', 'key', 'waveform']
         else:
-            # Mehrere Artists - kombiniere title und artist (Original-Verhalten)
+            # Multiple artists - combine title and artist (original behavior)
             track_df['title'] = track_df['title'] + ' / ' + track_df['artist']
             columns_to_show = ['pos', 'title', 'duration', 'bpm', 'key', 'waveform']
         
-        # Filtere DataFrame
+        # Filter DataFrame
         track_df_display = track_df[columns_to_show]
         
-        # LaTeX-Tabelle mit optimierten Spaltenabständen (sauberer Look)
+        # LaTeX table with optimized column spacing (clean look)
         latex_table = track_df_display.to_latex(
             index=False,
-            header=False,  # Entferne Tabellen-Header
-            escape=False,  # Wichtig: Lass LaTeX-Befehle durch
-            column_format="@{}l@{\\hspace{3pt}}X@{\\hspace{3pt}}l@{\\hspace{3pt}}l@{\\hspace{3pt}}l@{\\hspace{2pt}}c@{}"  # Flexiblere Abstände für bessere Lesbarkeit
+            header=False,  # Remove table header
+            escape=False,  # Important: Let LaTeX commands through
+            column_format="@{}l@{\\hspace{3pt}}X@{\\hspace{3pt}}l@{\\hspace{3pt}}l@{\\hspace{3pt}}l@{\\hspace{2pt}}c@{}"  # More flexible spacing for better readability
         )
         
-        # Entferne alle horizontalen Linien manuell
+        # Remove all horizontal lines manually
         latex_table = latex_table.replace('\\toprule\n', '')
         latex_table = latex_table.replace('\\midrule\n', '')
         latex_table = latex_table.replace('\\bottomrule\n', '')
@@ -266,7 +266,7 @@ def _create_label_original(release_folder, metadata, label_file):
         latex_table = latex_table.replace('\\bottomrule', '')
         latex_table = latex_table.replace('\\hline', '')
         
-        # Release-Informationen vorbereiten
+        # Prepare release information
         artists = metadata.get('artist', [])
         if isinstance(artists, list):
             artist_str = ', '.join(artists)
@@ -280,7 +280,7 @@ def _create_label_original(release_folder, metadata, label_file):
         else:
             label_str = str(labels)
         
-        # Jahr und Release ID
+        # Year and release ID
         year = str(metadata.get('year', ''))
         release_id = str(metadata.get('id', ''))
         
@@ -332,11 +332,11 @@ def _create_label_original(release_folder, metadata, label_file):
 # \\tiny{{\\textbf{{{unicode_to_latex(label_str)}}}, {year}, Release ID: {release_id}}}
 # \\end{{minipage}}"""
         
-        # Schreibe LaTeX-Datei
+        # Write LaTeX file
         with open(label_file, 'w', encoding='utf-8') as f:
             f.write(latex_content)
         
-        # Angepasste tabularx-Konvertierung für minipage (3.5in = ca. 8.9cm)
+        # Adapted tabularx conversion for minipage (3.5in = approx. 8.9cm)
         inplace_change(label_file, "\\begin{tabular}", "\\begin{tabularx}{3.4in}")
         inplace_change(label_file, "\\end{tabular}", "\\end{tabularx}")
         
@@ -350,26 +350,26 @@ def _create_label_original(release_folder, metadata, label_file):
 
 def combine_latex_labels(library_path, output_dir, max_labels=None, specific_release=None, since_date=None):
     """
-    Kombiniert alle Labels zu einem druckbaren LaTeX-Dokument
-    Basierend auf der originalen combineLatex Funktion aus der Git-History
+    Combines all labels into a printable LaTeX document
+    Based on the original combineLatex function from Git history
     
     Args:
-        library_path: Pfad zum Discogs Library Verzeichnis
-        output_dir: Ausgabe-Verzeichnis für das finale LaTeX-Dokument
-        max_labels: Maximale Anzahl Labels (None = alle)
-        specific_release: Release-ID für ein spezifisches Label (None = alle)
-        since_date: Datum ab dem Labels erstellt werden sollen (YYYY-MM-DD oder ISO format)
+        library_path: Path to Discogs library directory
+        output_dir: Output directory for final LaTeX document
+        max_labels: Maximum number of labels (None = all)
+        specific_release: Release ID for a specific label (None = all)
+        since_date: Date from which labels should be created (YYYY-MM-DD or ISO format)
     """
     
-    # Erstelle Output-Verzeichnis falls nicht vorhanden
+    # Create output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
     
-    # Finde Release-Ordner mit Labels
+    # Find release folders with labels
     if specific_release:
-        # Spezifisches Release verarbeiten - suche nach Ordner der mit der ID beginnt
+        # Process specific release - search for folder starting with the ID
         logger.info(f"Looking for release with ID: {specific_release}")
         
-        # Finde Ordner der mit der Release-ID beginnt
+        # Find folder starting with the release ID
         matching_dirs = []
         for item in os.listdir(library_path):
             if item.startswith(f"{specific_release}_"):
@@ -390,7 +390,7 @@ def combine_latex_labels(library_path, output_dir, max_labels=None, specific_rel
         if not os.path.exists(label_file):
             logger.warning(f"No LaTeX label found for release: {release_folder}")
             logger.info("Creating LaTeX label first...")
-            # Lade metadata für Label-Erstellung
+            # Load metadata for label creation
             metadata_file = os.path.join(release_path, 'metadata.json')
             if os.path.exists(metadata_file):
                 try:
@@ -408,21 +408,21 @@ def combine_latex_labels(library_path, output_dir, max_labels=None, specific_rel
         
         release_dirs = [(release_folder, "label.tex")]
     else:
-        # Alle Releases scannen
+        # Scan all releases
         logger.info("Scanning for releases with LaTeX labels...")
         all_items = os.listdir(library_path)
         release_dirs = []
         
-        # Parse since_date falls angegeben
+        # Parse since_date if provided
         since_datetime = None
         if since_date:
             try:
-                # Versuche verschiedene Datumsformate
+                # Try different date formats
                 if 'T' in since_date or '+' in since_date or 'Z' in since_date:
-                    # ISO Format
+                    # ISO format
                     since_datetime = date_parser.parse(since_date)
                 else:
-                    # Einfaches YYYY-MM-DD Format
+                    # Simple YYYY-MM-DD format
                     since_datetime = datetime.strptime(since_date, '%Y-%m-%d')
                 logger.info(f"Filtering releases added since: {since_datetime}")
             except ValueError as e:
@@ -434,7 +434,7 @@ def combine_latex_labels(library_path, output_dir, max_labels=None, specific_rel
             if os.path.isdir(item_path):
                 label_file = os.path.join(item_path, 'label.tex')
                 if os.path.exists(label_file):
-                    # Timestamp-Filterung falls since_date angegeben
+                    # Timestamp filtering if since_date provided
                     if since_datetime:
                         metadata_file = os.path.join(item_path, 'metadata.json')
                         if os.path.exists(metadata_file):
@@ -443,7 +443,7 @@ def combine_latex_labels(library_path, output_dir, max_labels=None, specific_rel
                                     metadata = json.load(f)
                                     if 'timestamp' in metadata:
                                         release_datetime = date_parser.parse(metadata['timestamp'])
-                                        # Entferne Timezone-Info für Vergleich falls nötig
+                                        # Remove timezone info for comparison if necessary
                                         if release_datetime.tzinfo is not None and since_datetime.tzinfo is None:
                                             release_datetime = release_datetime.replace(tzinfo=None)
                                         elif release_datetime.tzinfo is None and since_datetime.tzinfo is not None:
@@ -451,48 +451,48 @@ def combine_latex_labels(library_path, output_dir, max_labels=None, specific_rel
                                         if release_datetime >= since_datetime:
                                             release_dirs.append((item, "label.tex"))
                                     else:
-                                        # Falls kein timestamp, nutze Verzeichnis-Modifikationszeit
+                                        # If no timestamp, use directory modification time
                                         dir_mtime = datetime.fromtimestamp(os.path.getmtime(item_path))
                                         if dir_mtime >= since_datetime:
                                             release_dirs.append((item, "label.tex"))
                             except (json.JSONDecodeError, ValueError) as e:
                                 logger.debug(f"Error reading timestamp for {item}: {e}")
-                                # Bei Fehlern, falls kein timestamp verfügbar, verwende Verzeichnis-Zeit
+                                # On errors, if no timestamp available, use directory time
                                 dir_mtime = datetime.fromtimestamp(os.path.getmtime(item_path))
                                 if dir_mtime >= since_datetime:
                                     release_dirs.append((item, "label.tex"))
                         else:
-                            # Falls keine metadata.json, nutze Verzeichnis-Zeit
+                            # If no metadata.json, use directory time
                             dir_mtime = datetime.fromtimestamp(os.path.getmtime(item_path))
                             if dir_mtime >= since_datetime:
                                 release_dirs.append((item, "label.tex"))
                     else:
-                        # Keine Zeitfilterung
+                        # No time filtering
                         release_dirs.append((item, "label.tex"))
     
     if not release_dirs:
         logger.warning("No releases with LaTeX labels found")
         return False
     
-    # Sortiere alphabetisch für konsistente Reihenfolge
+    # Sort alphabetically for consistent order
     release_dirs.sort()
     
-    # Begrenze Anzahl falls gewünscht
+    # Limit number if desired
     if max_labels:
         release_dirs = release_dirs[:max_labels]
         logger.info(f"Limited to first {max_labels} releases")
     
     logger.process(f"Combining {len(release_dirs)} LaTeX labels for printing...")
     
-    # Konfiguration für 8163 shipping labels (Original-Layout)
-    labels_per_page = 10  # 2 Spalten x 5 Zeilen
+    # Configuration for 8163 shipping labels (original layout)
+    labels_per_page = 10  # 2 columns x 5 rows
     pages_needed = (len(release_dirs) + labels_per_page - 1) // labels_per_page
     
-    # Verbesserte Dateinamen
+    # Improved filenames
     if specific_release:
         base_name = f"vinyl_label_{release_dirs[0][0]}"
     elif since_date:
-        # Formatiere Datum für Dateinamen
+        # Format date for filename
         date_str = since_date.replace('-', '').replace(':', '').replace('T', '_')[:8]
         base_name = f"vinyl_labels_since_{date_str}_{len(release_dirs)}_releases"
     else:
@@ -501,14 +501,14 @@ def combine_latex_labels(library_path, output_dir, max_labels=None, specific_rel
     
     try:
         with open(output_file, 'w', encoding='utf-8') as f:
-            # LaTeX-Template Preamble einlesen
+            # Read LaTeX template preamble
             template_path = os.path.join(os.path.dirname(__file__), 'templates', 'latexTemplate.tex')
             with open(template_path, 'r', encoding='utf-8') as template:
                 f.write(template.read())
             
             release_idx = 0
             
-            # Seiten erstellen (Original-Algorithmus optimiert) mit Progress Bar
+            # Create pages (optimized original algorithm) with progress bar
             with tqdm(total=len(release_dirs), desc="Creating labels", unit="label") as pbar:
                 for page in range(pages_needed):
                     if release_idx >= len(release_dirs):
@@ -516,49 +516,57 @@ def combine_latex_labels(library_path, output_dir, max_labels=None, specific_rel
                         
                     f.write("\\begin{tikzpicture}[thick,font=\\Large]\n")
                     
-                    # 5 Zeilen x 2 Spalten = 10 Labels pro Seite (Original-Layout)
+                    # 5 rows x 2 columns = 10 labels per page (original layout)
                     for row in range(5):
                         if release_idx >= len(release_dirs):
                             break
-                        for col in [0, 1]:  # Original verwendete [0,1]
+                        for col in [0, 1]:  # Original used [0,1]
                             release_num = (col + 1) + (row * 2) + (page * 10)
                             if release_num > len(release_dirs):
                                 break
                             
                             release_dir, label_filename = release_dirs[release_idx]
                             
-                            # Position berechnen (Original-Koordinaten)
-                            x_pos = 4.1 * col  # Original: 4.1 inches Spaltenabstand
-                            y_pos = row * -2   # Original: -2 inches pro Zeile
+                            # Calculate position (original coordinates)
+                            x_pos = 4.1 * col  # Original: 4.1 inches column spacing
+                            y_pos = row * -2   # Original: -2 inches per row
                             
-                            # Label-Rahmen (Original-Design)
+                            # Label frame (original design)
                             f.write(f"\t\\draw[rounded corners=0.5cm] ({x_pos} in, {y_pos} in) rectangle +(4in,2in);\n")
                             
-                            # QR-Code Position (falls vorhanden)
-                            qr_file = os.path.join(library_path, release_dir, 'qrcode.png')
-                            if os.path.exists(qr_file):
+                            # QR code position (prioritize fancy QR, fallback to plain QR)
+                            qr_fancy_file = os.path.join(library_path, release_dir, 'qrcode_fancy.png')
+                            qr_plain_file = os.path.join(library_path, release_dir, 'qrcode.png')
+                            
+                            qr_file = None
+                            if os.path.exists(qr_fancy_file):
+                                qr_file = qr_fancy_file
+                            elif os.path.exists(qr_plain_file):
+                                qr_file = qr_plain_file
+                                
+                            if qr_file:
                                 qr_x = x_pos + 3.3
                                 qr_y = y_pos - 0.36 + 2
-                                # Absoluter Pfad zur QR-Code Datei
+                                # Absolute path to QR code file
                                 qr_path = os.path.abspath(qr_file).replace('\\', '/')
                                 f.write(f"\\node[right,align=left] at ({qr_x} in, {qr_y} in){{")
                                 f.write(f"\\includegraphics[width=1.5cm]{{{qr_path}}}}};\n")
                             
-                            # Label-Inhalt einbinden
+                            # Include label content
                             content_x = x_pos
                             content_y = y_pos + 1
-                            # Absoluter Pfad zur Label-Datei
+                            # Absolute path to label file
                             label_path = os.path.abspath(os.path.join(library_path, release_dir, label_filename)).replace('\\', '/')
                             f.write(f"\t\\node[right,align=left] at ({content_x} in, {content_y} in){{\n")
                             f.write(f"\t\t\\input{{{label_path}}}\n")
                             f.write("\t};\n")
                             
                             release_idx += 1
-                            pbar.update(1)  # Progress Bar Update für jedes verarbeitete Label
+                            pbar.update(1)  # Progress bar update for each processed label
                     
                     f.write("\\end{tikzpicture}\n")
                     
-                    # Neue Seite (Original-Style)
+                    # New page (original style)
                     if page < pages_needed - 1:
                         f.write("\\clearpage\n")
             
@@ -567,7 +575,7 @@ def combine_latex_labels(library_path, output_dir, max_labels=None, specific_rel
         logger.success(f"Master LaTeX document created: {output_file}")
         logger.info(f"📄 {pages_needed} pages with {len(release_dirs)} labels ready for printing")
         
-        # PDF kompilieren falls pdflatex verfügbar
+        # Compile PDF if pdflatex available
         if _compile_pdf(output_file, output_dir):
             logger.success("PDF successfully compiled!")
         
@@ -578,7 +586,7 @@ def combine_latex_labels(library_path, output_dir, max_labels=None, specific_rel
         return False
 
 def _compile_pdf(tex_file, output_dir):
-    """Kompiliert LaTeX zu PDF falls pdflatex verfügbar ist"""
+    """Compiles LaTeX to PDF if pdflatex is available"""
     import subprocess
     import shutil
     
@@ -590,14 +598,14 @@ def _compile_pdf(tex_file, output_dir):
     try:
         logger.process("Compiling LaTeX to PDF...")
         
-        # Wechsle in Output-Verzeichnis für relative Pfade
+        # Change to output directory for relative paths
         original_cwd = os.getcwd()
         os.chdir(output_dir)
         
-        # Extrahiere Basis-Dateiname
+        # Extract base filename
         tex_basename = os.path.splitext(os.path.basename(tex_file))[0]
         
-        # Kompiliere PDF (2x für Referenzen)
+        # Compile PDF (2x for references)
         for run in range(2):
             result = subprocess.run([
                 'pdflatex', 
@@ -610,7 +618,7 @@ def _compile_pdf(tex_file, output_dir):
                 logger.error(f"pdflatex error: {result.stderr}")
                 return False
         
-        # Aufräumen: .aux, .log Dateien löschen
+        # Cleanup: delete .aux, .log files
         for ext in ['.aux', '.log']:
             cleanup_file = f"{tex_basename}{ext}"
             if os.path.exists(cleanup_file):

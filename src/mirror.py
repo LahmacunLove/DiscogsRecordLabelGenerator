@@ -39,7 +39,7 @@ class DiscogsLibraryMirror:
     def _init_discogs_client(self):
         token = self.config.get("DISCOGS_USER_TOKEN")
         if not token:
-            raise ValueError("Discogs-Token fehlt in der Config.")
+            raise ValueError("Discogs token missing in config.")
         return discogs_client.Client("DiscogsDBLabelGen/0.1", user_token=token)
 
     def get_collection_release_ids(self):
@@ -51,17 +51,17 @@ class DiscogsLibraryMirror:
        page = 1  # start page?
        
        while True:
-           releases = folder.releases.page(page)  # Holt Releases der aktuellen Seite
+           releases = folder.releases.page(page)  # Get releases of current page
            # print(len(folder.releases.page(page)))
            for release in releases:
                release_ids.append(release.release.id)
        
-           # Wenn die aktuelle Seite weniger als per_page Releases hat, könnten wir fertig sein
-           if len(releases) < 50: # hier später auf 50 ändern, für ganze lib
+           # If current page has fewer than per_page releases, we might be done
+           if len(releases) < 50: # change to 50 later for entire library
                break
        
            page += 1
-           time.sleep(1)  # Zeit für Discogs API-Limit
+           time.sleep(1)  # Wait for Discogs API rate limit
        
        return release_ids
    
@@ -92,14 +92,14 @@ class DiscogsLibraryMirror:
 
     
     def save_release_metadata(self, release_id, metadata):
-        """Speichert die kompletten Metadaten eines Releases in einem Ordner und einer JSON-Datei."""
-        # Erstelle einen Ordner für das Release basierend auf der ID und ggf. einem Titel
-        # (kann auch mit der release_id als Name erfolgen)
+        """Saves the complete metadata of a release in a folder and JSON file."""
+        # Create a folder for the release based on the ID and possibly a title
+        # (can also be done with the release_id as name)
         title = sanitize_filename(metadata.get('title', release_id))
         release_folder = self.library_path / f"{release_id}_{title}"
         release_folder.mkdir(parents=True, exist_ok=True)
         
-        # Speichern der gesamten Metadaten als JSON-Datei
+        # Save all metadata as JSON file
         metadata_path = release_folder / "metadata.json"
         with open(metadata_path, "w", encoding="utf-8") as f:
             json.dump(metadata, f, indent=4, ensure_ascii=False)
@@ -108,10 +108,10 @@ class DiscogsLibraryMirror:
         
 
     def delete_release_folder(self, release_id):
-        """Löscht einen Ordner, der ein Release enthält, falls das Release nicht mehr existiert."""
+        """Deletes a folder containing a release if the release no longer exists."""
         # release_folder = self.library_path / f"{release_id}"
         if self.release_folder.exists() and self.release_folder.is_dir():
-            print(f"Lösche Release: {release_id}")
+            print(f"Deleting release: {release_id}")
             shutil.rmtree(self.release_folder)
             
     def convert_to_datetime(self,datetime_string):
@@ -121,19 +121,19 @@ class DiscogsLibraryMirror:
 
             
             
-    def sync_releases(self, max_releases=None):
-        """Vergleicht die Releases und speichert neue Releases oder löscht gelöschte Releases."""
-        # Lokale IDs immer laden
+    def sync_releases(self, max_releases=None, download_only=False, progress_callback=None):
+        """Compares releases and saves new releases or deletes removed releases."""
+        # Always load local IDs
         local_ids = set(self.get_local_release_ids())
 
         if max_releases:
-            # Development/Limited Mode: Nur Metadaten abrufen wenn noch keine max_releases vorliegen
+            # Development/Limited Mode: Only fetch metadata if we don't have max_releases yet
             if len(local_ids) >= max_releases:
                 logger.info(f"Development mode: Already have {len(local_ids)} releases (>= {max_releases}), skipping Discogs API calls")
                 logger.info("Continuing with existing local releases for processing...")
                 releases_to_process = list(local_ids)[:max_releases]
                 
-                # Für bestehende Releases: Generiere immer neue LaTeX-Labels
+                # For existing releases: Always generate new LaTeX labels
                 logger.process("Regenerating LaTeX labels for existing releases...")
                 logger.info(f"Will regenerate labels for {len(releases_to_process)} releases: {list(releases_to_process)[:3]}...")
                 with tqdm(total=len(releases_to_process), desc="Updating labels", unit="release") as pbar:
@@ -145,9 +145,9 @@ class DiscogsLibraryMirror:
                             logger.warning(f"✗ Failed to regenerate label for {release_id}")
                         pbar.update(1)
                 logger.success("Label regeneration completed!")
-                return  # Fertig - keine weiteren Sync-Operationen nötig
+                return  # Done - no further sync operations needed
             else:
-                # Nur jetzt Discogs Collection laden wenn wirklich nötig
+                # Only now load Discogs collection if really necessary
                 logger.info(f"Development mode: Have {len(local_ids)} releases, need {max_releases - len(local_ids)} more")
                 logger.process("Loading Discogs collection for missing releases...")
                 discogs_ids = set(self.get_collection_release_ids())
@@ -155,7 +155,7 @@ class DiscogsLibraryMirror:
                 missing_count = max_releases - len(local_ids)
                 logger.info(f"Collection size: {len(discogs_ids)} total releases")
                 
-                # Nimm die ersten N Releases aus der Collection, aber überspringe die bereits vorhandenen
+                # Take the first N releases from the collection, but skip those already present
                 all_discogs_ids = list(discogs_ids)
                 releases_to_process = []
                 for release_id in all_discogs_ids:
@@ -170,7 +170,7 @@ class DiscogsLibraryMirror:
                 logger.info("No releases to process")
                 return
         else:
-            # Normal Mode: Nur neue Releases verarbeiten - hier Discogs laden
+            # Normal Mode: Only process new releases - load Discogs here
             logger.process("Loading Discogs collection for comparison...")
             discogs_ids = set(self.get_collection_release_ids())
             releases_to_process = list(discogs_ids - local_ids)
@@ -180,31 +180,50 @@ class DiscogsLibraryMirror:
                 return
                 
         
-        # Progress Bar für Release-Verarbeitung
-        with tqdm(total=len(releases_to_process), desc="Processing releases", unit="release") as pbar:
+        # Progress bar for release processing
+        mode_desc = "Downloading releases" if download_only else "Processing releases"
+        
+        if progress_callback:
+            # GUI mode - use callback for progress reporting
             with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
-                futures = [executor.submit(self.sync_single_release, release_id) for release_id in releases_to_process]
-            
+                futures = [executor.submit(self.sync_single_release, release_id, download_only) for release_id in releases_to_process]
+                completed = 0
+                
                 for future in concurrent.futures.as_completed(futures):
                     try:
                         result = future.result()
-                        pbar.update(1)  # Fortschritt um 1 erhöhen
+                        completed += 1
+                        progress_callback(completed, len(releases_to_process), mode_desc)
                     except Exception as e:
-                        logger.error(f"Fehler beim Synchronisieren: {e}")
-                        pbar.update(1)  # Auch bei Fehlern Fortschritt erhöhen
+                        logger.error(f"Error during synchronization: {e}")
+                        completed += 1
+                        progress_callback(completed, len(releases_to_process), mode_desc)
+        else:
+            # Console mode - use tqdm
+            with tqdm(total=len(releases_to_process), desc=mode_desc, unit="release") as pbar:
+                with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
+                    futures = [executor.submit(self.sync_single_release, release_id, download_only) for release_id in releases_to_process]
+                
+                    for future in concurrent.futures.as_completed(futures):
+                        try:
+                            result = future.result()
+                            pbar.update(1)  # Increase progress by 1
+                        except Exception as e:
+                            logger.error(f"Error during synchronization: {e}")
+                            pbar.update(1)  # Also increase progress on errors
 
 
-        # Gelöschte Releases entfernen
+        # Remove deleted releases
         # removed_ids = local_ids - discogs_ids
         # for release_id in removed_ids:
-        #     print(f"Release entfernt: {release_id}")
+        #     print(f"Release removed: {release_id}")
         #     self.delete_release_folder(release_id)
 
             
             
-    def sync_single_release(self, release_id):
-        # Neue Releases speichern
-        collectionElement = self.discogs.release(release_id)  # Holt die Metadaten hier stimmt was nicht
+    def sync_single_release(self, release_id, download_only=False):
+        # Save new releases
+        collectionElement = self.discogs.release(release_id)  # Get metadata here something is wrong
         timestamp = self.discogs.user(self.username).collection_items(release_id)[0].data['date_added']
         
         logger.debug(f"Processing release: {collectionElement.url}")
@@ -213,7 +232,7 @@ class DiscogsLibraryMirror:
             logger.debug(f"Apple Music link: {collectionElement.apple}")
         except:
             pass
-        # Metadaten sammeln
+        # Collect metadata
         metadata = {
             "title": collectionElement.title,
             "artist": [r.name for r in collectionElement.artists],
@@ -226,7 +245,7 @@ class DiscogsLibraryMirror:
             "videos": [video.url for video in collectionElement.videos] if hasattr(collectionElement, 'videos') else []
         }
 
-        # Tracklist sammeln
+        # Collect tracklist
         tracklist = []
         for track in collectionElement.tracklist:
             track_artists = ', '.join([r.name for r in track.artists]) if hasattr(track, 'artists') else ''
@@ -249,22 +268,29 @@ class DiscogsLibraryMirror:
         self.save_cover_art(release_id, metadata)
         
         # do all youtube stuff
-        yt_searcher = youtube_handler.YouTubeMatcher(self.release_folder, False) # initiiere yt_module
+        yt_searcher = youtube_handler.YouTubeMatcher(self.release_folder, False) # initialize yt_module
         yt_searcher.match_discogs_release_youtube(metadata) # match metadata and save matches
-        yt_searcher.audio_download_analyze(metadata) # download matches
         
-        # create qr code with cover background
-        generate_qr_code_advanced(self.release_folder, release_id, metadata)
-        
-        # create latex labels
-        create_latex_label_file(self.release_folder, metadata)
+        if download_only:
+            # Download-only mode: only download audio files without analysis
+            logger.info(f"[{release_id}] Download-only mode: downloading audio without analysis")
+            yt_searcher.audio_download_only(metadata)
+        else:
+            # Normal mode: download and analyze
+            yt_searcher.audio_download_analyze(metadata) # download matches
+            
+            # create qr code with cover background
+            generate_qr_code_advanced(self.release_folder, release_id, metadata)
+            
+            # create latex labels
+            create_latex_label_file(self.release_folder, metadata)
     
     def regenerate_latex_label(self, release_id):
-        """Regeneriert nur das LaTeX-Label für ein bestehendes Release ohne Sync-Operationen"""
+        """Regenerates only the LaTeX label for an existing release without sync operations"""
         try:
             logger.debug(f"Regenerating label for release ID: {release_id}")
             
-            # Finde Release-Ordner
+            # Find release folder
             release_folder = None
             for item in self.library_path.iterdir():
                 if item.is_dir() and item.name.startswith(f"{release_id}_"):
@@ -275,7 +301,7 @@ class DiscogsLibraryMirror:
                 logger.error(f"Release folder not found for ID: {release_id} in {self.library_path}")
                 return False
             
-            # Lade bestehende Metadaten
+            # Load existing metadata
             metadata_file = release_folder / 'metadata.json'
             if not metadata_file.exists():
                 logger.error(f"No metadata.json found for release {release_id} at {metadata_file}")
@@ -285,13 +311,13 @@ class DiscogsLibraryMirror:
             with open(metadata_file, 'r', encoding='utf-8') as f:
                 metadata = json.load(f)
             
-            # Erstelle neues LaTeX-Label (überschreibt bestehende)
+            # Create new LaTeX label (overwrites existing)
             logger.debug(f"Creating LaTeX label for: {metadata.get('title', 'Unknown')}")
             result = create_latex_label_file(str(release_folder), metadata)
             
             if result:
                 logger.debug(f"✓ Successfully regenerated LaTeX label for release {release_id}")
-                # Überprüfe ob die Datei wirklich erstellt wurde
+                # Check if file was really created
                 label_file = release_folder / 'label.tex'
                 if label_file.exists():
                     logger.debug(f"✓ label.tex file exists at: {label_file}")
@@ -313,7 +339,7 @@ class DiscogsLibraryMirror:
         # analyze track
     
     def regenerate_existing_files(self, regenerate_labels=False, regenerate_waveforms=False):
-        """Regeneriert LaTeX-Labels und/oder Waveforms für alle bestehenden Releases"""
+        """Regenerates LaTeX labels and/or waveforms for all existing releases"""
         local_ids = set(self.get_local_release_ids())
         
         if not local_ids:
@@ -322,10 +348,10 @@ class DiscogsLibraryMirror:
         
         logger.info(f"Found {len(local_ids)} local releases for regeneration")
         
-        # Sortiere für konsistente Reihenfolge
+        # Sort for consistent order
         releases_to_process = sorted(list(local_ids))
         
-        # Progress Bar für Regeneration
+        # Progress bar for regeneration
         desc = []
         if regenerate_labels:
             desc.append("labels")
@@ -344,7 +370,7 @@ class DiscogsLibraryMirror:
                 if regenerate_waveforms:
                     success_waveforms = self.regenerate_waveforms(release_id)
                 
-                # Logging für Erfolg/Fehler
+                # Logging for success/failure
                 if regenerate_labels and regenerate_waveforms:
                     if success_labels and success_waveforms:
                         logger.debug(f"✓ Labels & waveforms regenerated for {release_id}")
@@ -366,7 +392,7 @@ class DiscogsLibraryMirror:
         logger.success(f"Regeneration completed for {len(releases_to_process)} releases!")
     
     def process_existing_releases_offline(self):
-        """Verarbeitet bestehende Releases offline ohne Discogs/YouTube Sync"""
+        """Processes existing releases offline without Discogs/YouTube sync"""
         local_ids = set(self.get_local_release_ids())
         
         if not local_ids:
@@ -375,13 +401,13 @@ class DiscogsLibraryMirror:
         
         logger.info(f"Found {len(local_ids)} local releases for offline processing")
         
-        # Sortiere für konsistente Reihenfolge
+        # Sort for consistent order
         releases_to_process = sorted(list(local_ids))
         
         with tqdm(total=len(releases_to_process), desc="Processing offline", unit="release") as pbar:
             for release_id in releases_to_process:
                 try:
-                    # Finde Release-Ordner
+                    # Find release folder
                     release_folder = None
                     for item in self.library_path.iterdir():
                         if item.is_dir() and item.name.startswith(f"{release_id}_"):
@@ -395,7 +421,7 @@ class DiscogsLibraryMirror:
                     
                     self.release_folder = release_folder
                     
-                    # Lade Metadaten
+                    # Load metadata
                     metadata_file = release_folder / 'metadata.json'
                     if not metadata_file.exists():
                         logger.warning(f"No metadata.json found for release {release_id}")
@@ -407,13 +433,13 @@ class DiscogsLibraryMirror:
                     
                     logger.debug(f"Processing offline: {release_id}")
                     
-                    # 1. Audio-Analyse (falls noch nicht vorhanden)
+                    # 1. Audio analysis (if not already present)
                     self._process_audio_analysis_offline(metadata)
                     
-                    # 2. QR-Code Generierung (sowohl einfach als auch fancy)
+                    # 2. QR code generation (both simple and fancy)
                     generate_qr_code_advanced(self.release_folder, release_id, metadata)
                     
-                    # 3. LaTeX Label erstellen/aktualisieren
+                    # 3. Create/update LaTeX label
                     create_latex_label_file(self.release_folder, metadata)
                     
                 except Exception as e:
@@ -424,7 +450,7 @@ class DiscogsLibraryMirror:
         logger.success(f"Offline processing completed for {len(releases_to_process)} releases!")
     
     def _process_audio_analysis_offline(self, metadata):
-        """Führt Audio-Analyse für existierende Dateien durch falls noch nicht vorhanden"""
+        """Performs audio analysis for existing files if not already present"""
         from analyzeSoundFile import analyzeAudioFileOrStream
         
         for track in metadata.get('tracklist', []):
@@ -432,7 +458,7 @@ class DiscogsLibraryMirror:
             if not track_pos:
                 continue
             
-            # Suche nach Audio-Datei
+            # Search for audio file
             audio_extensions = ['.opus', '.mp3', '.wav', '.m4a', '.ogg']
             audio_file = None
             
@@ -445,22 +471,22 @@ class DiscogsLibraryMirror:
             if not audio_file:
                 continue
             
-            # Prüfe ob Analyse bereits existiert
+            # Check if analysis already exists
             analysis_file = self.release_folder / f"{track_pos}.json"
             waveform_file = self.release_folder / f"{track_pos}_waveform.png"
             
             if analysis_file.exists() and waveform_file.exists():
-                continue  # Bereits analysiert
+                continue  # Already analyzed
             
             try:
                 logger.debug(f"Analyzing audio file: {audio_file.name}")
                 analyzer = analyzeAudioFileOrStream(str(audio_file))
                 
-                # Analyse nur durchführen wenn noch nicht vorhanden
+                # Only perform analysis if not already present
                 if not analysis_file.exists():
                     analyzer.music_analyze()
                 
-                # Waveform nur generieren wenn noch nicht vorhanden
+                # Only generate waveform if not already present
                 if not waveform_file.exists():
                     analyzer.generate_waveform_gnuplot()
                     
@@ -468,9 +494,9 @@ class DiscogsLibraryMirror:
                 logger.warning(f"Failed to analyze {audio_file.name}: {e}")
     
     def regenerate_waveforms(self, release_id):
-        """Regeneriert alle Waveforms für ein bestehendes Release"""
+        """Regenerates all waveforms for an existing release"""
         try:
-            # Finde Release-Ordner
+            # Find release folder
             release_folder = None
             for item in self.library_path.iterdir():
                 if item.is_dir() and item.name.startswith(f"{release_id}_"):
@@ -480,7 +506,7 @@ class DiscogsLibraryMirror:
                 logger.error(f"Release folder not found for ID: {release_id}")
                 return False
             
-            # Lade Metadaten für Tracklist
+            # Load metadata for tracklist
             metadata_file = release_folder / 'metadata.json'
             if not metadata_file.exists():
                 logger.error(f"No metadata.json found for release {release_id}")
@@ -489,7 +515,7 @@ class DiscogsLibraryMirror:
             with open(metadata_file, 'r', encoding='utf-8') as f:
                 metadata = json.load(f)
             
-            # Finde alle Audio-Dateien und regeneriere Waveforms
+            # Find all audio files and regenerate waveforms
             from analyzeSoundFile import analyzeAudioFileOrStream
             
             waveforms_generated = 0
@@ -498,7 +524,7 @@ class DiscogsLibraryMirror:
                 if not track_pos:
                     continue
                 
-                # Suche nach Audio-Datei
+                # Search for audio file
                 audio_file = None
                 for ext in ['.opus', '.m4a', '.mp3', '.wav']:
                     potential_file = release_folder / f"{track_pos}{ext}"
@@ -508,11 +534,11 @@ class DiscogsLibraryMirror:
                 
                 if audio_file:
                     try:
-                        # Initialisiere Audio-Analyzer
+                        # Initialize audio analyzer
                         analyzer = analyzeAudioFileOrStream(str(audio_file))
                         analyzer.load_audio()
                         
-                        # Generiere Waveform
+                        # Generate waveform
                         if analyzer.generate_waveform():
                             waveforms_generated += 1
                             logger.debug(f"✓ Generated waveform for track {track_pos}")
@@ -592,4 +618,3 @@ class DiscogsLibraryMirror:
             
         return
             
-

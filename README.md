@@ -105,9 +105,10 @@ python3 gui.py
 ```
 The GUI provides:
 - Easy configuration management
-- Processing mode selection (Full/Dev/Dry Run/Custom)
+- Processing mode selection (Full/Dev/Dry Run/Download Only/Generate Labels Only/Custom)
 - Real-time progress monitoring
 - One-click processing
+- Label generation from existing releases
 
 ### Command Line Mode
 ```bash
@@ -119,6 +120,12 @@ python3 main.py --dev
 
 # Dry run (offline processing of existing releases)
 python3 main.py --dryrun
+
+# Download-only mode (sync and download without analysis)
+python3 main.py --download-only
+
+# Download-only with development mode
+python3 main.py --download-only --dev
 
 # Custom limit (e.g., first 25 releases)  
 python3 main.py --max 25

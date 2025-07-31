@@ -11,22 +11,22 @@ from pathlib import Path
 import json
 
 def load_config(config_path="~/.config/discogsDBLabelGen/discogs.env"):
-    # Lade die Konfigurationsdatei und lese sie als JSON
+    # Load the configuration file and read it as JSON
     config_file = Path(config_path).expanduser()
     
-    # Überprüfen, ob die Konfigurationsdatei existiert
+    # Check if the configuration file exists
     if not config_file.exists():
-        raise FileNotFoundError(f"Config-Datei nicht gefunden: {config_file}")
+        raise FileNotFoundError(f"Configuration file not found: {config_file}")
     
-    # Lade die Konfigurationsdatei
+    # Load the configuration file
     with open(config_file, "r") as f:
         config = json.load(f)
 
-    # Wenn der Pfad LIBRARY_PATH enthält, löse $HOME auf
+    # If LIBRARY_PATH contains variables, expand them
     if "LIBRARY_PATH" in config:
         config["LIBRARY_PATH"] = os.path.expandvars(config["LIBRARY_PATH"])
     
-    print("Config geladen.")
+    print("Configuration loaded.")
     return config
 
 def get_config_path():
