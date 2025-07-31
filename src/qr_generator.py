@@ -15,7 +15,7 @@ from logger import logger
 
 def generate_qr_code(release_folder, release_id, cover_file=None):
     """
-    Generiert QR-Code für ein Discogs Release
+    Generiert sowohl einfache als auch künstlerische QR-Codes für ein Discogs Release
     
     Args:
         release_folder: Pfad zum Release-Ordner
@@ -29,7 +29,7 @@ def generate_qr_code(release_folder, release_id, cover_file=None):
     # Prüfe ob segno verfügbar ist, fallback auf qrcode
     try:
         import segno
-        return _generate_qr_segno(release_folder, release_id, cover_file)
+        return _generate_qr_segno_both(release_folder, release_id, cover_file)
     except ImportError:
         logger.debug("segno not available, trying qrcode library")
         try:
@@ -41,59 +41,69 @@ def generate_qr_code(release_folder, release_id, cover_file=None):
             logger.info("Install with: pip install segno  or  pip install qrcode[pil]")
             return False
 
-def _generate_qr_segno(release_folder, release_id, cover_file=None):
-    """Segno-basierte QR-Code Generierung"""
+def _generate_qr_segno_both(release_folder, release_id, cover_file=None):
+    """Segno-basierte QR-Code Generierung - erstellt sowohl einfache als auch künstlerische QR-Codes"""
     import segno
     
     qr_file = os.path.join(release_folder, 'qrcode.png')
-    
-    # Prüfe ob QR-Code bereits existiert
-    if os.path.exists(qr_file):
-        logger.debug(f"QR code already exists: {os.path.basename(qr_file)}")
-        return True
+    qr_fancy_file = os.path.join(release_folder, 'qrcode_fancy.png')
     
     # Finde Cover-Datei falls nicht angegeben
     if not cover_file:
         cover_file = os.path.join(release_folder, 'cover.jpg')
     
     try:
-        logger.process(f"Generating QR code with segno for release {release_id}")
+        logger.process(f"Generating QR codes with segno for release {release_id}")
         
         # Erstelle QR-Code mit Discogs-URL
         discogs_url = f'https://discogs.com/release/{release_id}'
         qr_code = segno.make_qr(discogs_url, error='l')
         
-        # Versuche artistic QR mit Cover (falls to_artistic verfügbar)
-        if os.path.exists(cover_file) and hasattr(qr_code, 'to_artistic'):
+        success = False
+        
+        # 1. Erstelle einfachen QR-Code (immer)
+        if not os.path.exists(qr_file):
+            logger.debug("Creating simple QR code with segno")
+            qr_code.save(
+                qr_file,
+                scale=10,
+                border=2,
+                dark='black',
+                light='white'
+            )
+            logger.success(f"Simple QR code created: {os.path.basename(qr_file)}")
+            success = True
+        else:
+            logger.debug(f"Simple QR code already exists: {os.path.basename(qr_file)}")
+            success = True
+        
+        # 2. Erstelle künstlerischen QR-Code mit Cover (falls möglich)
+        if not os.path.exists(qr_fancy_file) and os.path.exists(cover_file) and hasattr(qr_code, 'to_artistic'):
             try:
-                logger.debug(f"Using cover as background: {os.path.basename(cover_file)}")
+                logger.debug(f"Creating fancy QR code with cover: {os.path.basename(cover_file)}")
                 qr_code.to_artistic(
                     background=cover_file,
-                    target=qr_file,
+                    target=qr_fancy_file,
                     scale=10,
                     border=2
                 )
-                logger.success(f"Artistic QR code with cover created: {os.path.basename(qr_file)}")
-                return True
+                logger.success(f"Fancy QR code with cover created: {os.path.basename(qr_fancy_file)}")
             except Exception as e:
-                logger.warning(f"Artistic QR failed: {e}, falling back to simple QR")
+                logger.warning(f"Fancy QR creation failed: {e}")
+        elif os.path.exists(qr_fancy_file):
+            logger.debug(f"Fancy QR code already exists: {os.path.basename(qr_fancy_file)}")
+        elif not os.path.exists(cover_file):
+            logger.debug("No cover image found - skipping fancy QR code")
         
-        # Fallback: Einfacher QR-Code (immer verfügbar)
-        logger.debug("Creating simple QR code with segno")
-        qr_code.save(
-            qr_file,
-            scale=10,
-            border=2,
-            dark='black',
-            light='white'
-        )
-        logger.success(f"Simple segno QR code created: {os.path.basename(qr_file)}")
-        
-        return True
+        return success
         
     except Exception as e:
-        logger.error(f"Error generating segno QR code for release {release_id}: {e}")
+        logger.error(f"Error generating segno QR codes for release {release_id}: {e}")
         return False
+
+def _generate_qr_segno(release_folder, release_id, cover_file=None):
+    """Legacy function - kept for compatibility"""
+    return _generate_qr_segno_both(release_folder, release_id, cover_file)
 
 def _generate_qr_standard(release_folder, release_id, cover_file=None):
     """Standard qrcode Library mit PIL für Cover-Integration"""

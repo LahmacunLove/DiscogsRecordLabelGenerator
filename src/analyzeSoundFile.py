@@ -204,10 +204,12 @@ class analyzeAudioFileOrStream:
             with open(gnuplot_script_path, 'r') as original:
                 script_content = original.read()
             
-            # Ersetze Output-Pfad im Script
+            # Ersetze Output-Pfad im Script mit korrektem Gnuplot-Quoting
+            # Gnuplot benötigt double quotes für Pfade mit Sonderzeichen
+            gnuplot_safe_path = waveform_file.replace('\\', '\\\\').replace('"', '\\"')
             script_content = script_content.replace(
                 "# Output wird von Command-Line gesetzt\n# set output 'waveform.png';",
-                f"set output '{waveform_file}';"
+                f'set output "{gnuplot_safe_path}";'
             )
             
             temp_script.write(script_content)

@@ -29,4 +29,7 @@ def load_config(config_path="~/.config/discogsDBLabelGen/discogs.env"):
     print("Config geladen.")
     return config
 
+def get_config_path():
+    """Return the path to the configuration file"""
+    return Path("~/.config/discogsDBLabelGen/discogs.env").expanduser()
     

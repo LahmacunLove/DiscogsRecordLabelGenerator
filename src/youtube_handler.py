@@ -9,6 +9,7 @@ from analyzeSoundFile import analyzeAudioFileOrStream
 from logger import logger
 import concurrent.futures
 import threading
+from utils import sanitize_filename
 
 def _analyze_track_standalone(task):
     """Standalone-Funktion für parallele Track-Analyse"""
@@ -225,10 +226,64 @@ class YouTubeMatcher:
             # Speichern als JSON
             with open(os.path.join(self.release_folder,"yt_matches.json"), "w", encoding="utf-8") as f:
                 json.dump(self.matches, f, indent=2, ensure_ascii=False)
+        
+        # Aktualisiere Original-Metadaten mit YouTube-Dauern falls Discogs-Dauer fehlt
+        self.update_metadata_with_youtube_durations()
             
         return
     
-    
+    def update_metadata_with_youtube_durations(self):
+        """Aktualisiert die Original-Metadaten mit YouTube-Dauern falls Discogs-Dauer fehlt"""
+        metadata_file = os.path.join(self.release_folder, "metadata.json")
+        
+        if not os.path.exists(metadata_file):
+            logger.warning("metadata.json not found - cannot update durations")
+            return
+            
+        # Lade Original-Metadaten
+        try:
+            with open(metadata_file, 'r', encoding='utf-8') as f:
+                metadata = json.load(f)
+        except Exception as e:
+            logger.error(f"Error loading metadata.json: {e}")
+            return
+            
+        # Erstelle ein Mapping von Track-Position zu YouTube-Dauer
+        youtube_durations = {}
+        for match in self.matches:
+            track_pos = match.get('track_position')
+            youtube_match = match.get('youtube_match')
+            if track_pos and youtube_match and youtube_match.get('length'):
+                # Konvertiere Sekunden zu MM:SS Format
+                duration_seconds = youtube_match['length']
+                minutes = duration_seconds // 60
+                seconds = duration_seconds % 60
+                duration_str = f"{minutes}:{seconds:02d}"
+                youtube_durations[track_pos] = duration_str
+        
+        # Aktualisiere Tracks mit fehlenden Dauern
+        updated_count = 0
+        for track in metadata.get('tracklist', []):
+            track_pos = track.get('position')
+            current_duration = track.get('duration')
+            
+            # Wenn keine Dauer oder leere Dauer vorhanden ist
+            if track_pos and (not current_duration or current_duration.strip() == ''):
+                if track_pos in youtube_durations:
+                    track['duration'] = youtube_durations[track_pos]
+                    updated_count += 1
+                    logger.info(f"Updated track {track_pos} duration: {youtube_durations[track_pos]} (from YouTube)")
+        
+        # Speichere aktualisierte Metadaten falls Änderungen vorgenommen wurden
+        if updated_count > 0:
+            try:
+                with open(metadata_file, 'w', encoding='utf-8') as f:
+                    json.dump(metadata, f, indent=4, ensure_ascii=False)
+                logger.success(f"Updated {updated_count} track durations in metadata.json")
+            except Exception as e:
+                logger.error(f"Error saving updated metadata.json: {e}")
+        else:
+            logger.debug("No track durations needed updating")
     
     def audio_download_analyze(self, release_metadata):
         """Downloads audio for matched tracks and performs analysis"""
@@ -266,7 +321,7 @@ class YouTubeMatcher:
                 self.matches[i]["discogs_duration"] = match["youtube_match"]["length"]
             
             track_position = match["track_position"]
-            track_filename_base = os.path.join(self.release_folder, track_position)
+            track_filename_base = os.path.join(self.release_folder, sanitize_filename(track_position))
             
             # Check if audio file already exists
             existing_file = self.get_downloaded_audio_file(track_filename_base)
@@ -305,14 +360,17 @@ class YouTubeMatcher:
         return
     
     def _parallel_audio_analysis(self, downloaded_tracks):
-        """Führt parallele Audio-Analyse mit ThreadPoolExecutor durch"""
+        """Führt parallele Audio-Analyse mit ProcessPoolExecutor durch (optimiert für CPU-bound tasks)"""
         import concurrent.futures
         import time
         
-        # Optimale Thread-Anzahl: CPU-Kerne, aber nicht mehr als Tracks
-        max_workers = min(len(downloaded_tracks), os.cpu_count() or 2)
+        # Optimale Prozess-Anzahl für CPU-intensive Essentia-Analyse
+        # Nutze 80% der CPU-Kerne, aber nicht mehr als Tracks vorhanden sind
+        cpu_cores = os.cpu_count() or 2
+        optimal_workers = max(1, int(cpu_cores * 0.8))  # 80% der Kerne für bessere Systemstabilität
+        max_workers = min(len(downloaded_tracks), optimal_workers)
         
-        logger.info(f"🔄 Starting parallel analysis with {max_workers} workers")
+        logger.info(f"🔄 Starting parallel analysis with {max_workers}/{cpu_cores} processes (ProcessPoolExecutor)")
         analysis_start = time.time()
         
         # Bereite Daten für parallele Verarbeitung vor
@@ -330,8 +388,8 @@ class YouTubeMatcher:
             logger.warning("No audio files found for analysis")
             return
         
-        # Verwende ThreadPoolExecutor mit expliziten Task-Argumenten
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Verwende ProcessPoolExecutor für CPU-intensive Essentia-Analyse
+        with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
             # Starte alle Analyse-Tasks
             future_to_track = {
                 executor.submit(_analyze_track_standalone, task): task['track_position']
@@ -371,7 +429,7 @@ class YouTubeMatcher:
         logger.info(f"   ❌ Failed: {failed} tracks")
         logger.info(f"   ⏱️  Total time: {total_time:.2f}s")
         logger.info(f"   📈 Average per track: {avg_time:.2f}s")
-        logger.info(f"   🚀 Speedup: ~{len(downloaded_tracks) * avg_time / total_time:.1f}x faster than sequential")
+        logger.info(f"   🚀 Parallel speedup: ~{len(downloaded_tracks) * avg_time / max(total_time, 0.1):.1f}x faster than sequential")
 
 
 

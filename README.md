@@ -1,153 +1,199 @@
 # DiscogsRecordLabelGenerator
 
-## Overview
+A Python application that syncs your Discogs collection, analyzes tracks, and generates printable vinyl record labels.
 
-A comprehensive Python application for crawling Discogs music libraries and generating professional printable labels for vinyl record collections. The system integrates advanced music analysis, YouTube video matching, and LaTeX-based label generation.
+## What it does
 
-## Features
-
-### Music Analysis & Data Collection
-- **Discogs API Integration**: Sync your complete Discogs collection
-- **YouTube Video Matching**: Intelligent track-to-video pairing with fuzzy matching
-- **Audio Analysis**: BPM, key detection, spectrograms, and MFCC analysis using Essentia
-- **Waveform Generation**: Fast gnuplot-based waveform visualization for labels
-- **Similarity Analysis**: Multi-dimensional audio feature comparison across your collection
-
-### Label Generation
-- **Professional Labels**: Generate 8163 shipping label format for home printing
-- **LaTeX-Based**: High-quality typesetting with automatic sizing
-- **Track Information**: Includes waveforms, BPM, key, and track details
-- **Batch Processing**: Generate labels for entire collection or selected releases
-
-### Performance Optimizations
-- **Parallel Processing**: Concurrent YouTube metadata fetching and release processing
-- **Intelligent Caching**: Skip re-downloading and re-analysis of existing files
-- **Independent Analysis**: Waveform and audio analysis run separately for efficiency
-- **Error Recovery**: Robust handling of failed downloads and API errors
+1. **Downloads your Discogs collection** via the Discogs API
+2. **Matches tracks to YouTube videos** for audio analysis  
+3. **Analyzes audio files** using Essentia (BPM, key detection, spectrograms)
+4. **Generates waveform images** with gnuplot
+5. **Creates QR codes** (both plain and fancy with cover art backgrounds)
+6. **Creates printable labels** in PDF format using LaTeX
 
 ## Quick Start
 
-1. **Configuration**: Create config file at `~/.config/discogsDBLabelGen/discogs.env`
-2. **Sync Collection**: `python3 main.py`
-3. **Generate Labels**: `python3 generate_labels.py`
+### Option 1: GUI (Recommended for beginners)
+```bash
+python3 gui.py
+```
+Use the graphical interface to configure your Discogs token and library path, then start processing with a click!
 
-## Dependencies
+![GUI Screenshot](screenshot_gui.png)
 
-### External Tools (required in $PATH)
-- `ffmpeg` - Audio processing and format conversion
-- `pdfLaTeX` - PDF generation from LaTeX templates  
-- `gnuplot` - Fast waveform visualization (optional but recommended)
+### Option 2: Command Line
+```bash
+python3 main.py --dev  # Process first 10 releases
+```
+
+## Requirements
+
+### External Tools (must be in $PATH)
+- `ffmpeg` - Audio processing
+- `pdfLaTeX` - PDF generation  
+- `gnuplot` - Waveform generation (optional but recommended)
 
 ### Python Libraries
-- `discogs_client` - Discogs API interaction
-- `yt_dlp` - YouTube video downloading
-- `essentia` - Music analysis and feature extraction
-- `pandas` - Data manipulation for LaTeX tables
-- `rapidfuzz` - String matching for track pairing
-- `scipy` - Optimization algorithms
-- `segno` - Modern QR code generation
-- `matplotlib` - Plotting and waveform visualization
+```bash
+pip install discogs_client yt-dlp essentia pandas rapidfuzz scipy matplotlib tqdm segno
+```
 
-## Installation & Setup
+## Setup
 
-1. **Clone Repository**
-   ```bash
-   git clone https://github.com/LahmacunLove/DiscogsRecordLabelGenerator.git
-   cd DiscogsRecordLabelGenerator
-   ```
+### 1. Install Python Dependencies
+```bash
+pip install discogs_client yt-dlp essentia pandas rapidfuzz scipy matplotlib tqdm segno
+```
 
-2. **Install Dependencies**
-   ```bash
-   # Install Python packages
-   pip install discogs_client yt-dlp essentia pandas rapidfuzz scipy segno matplotlib
+### 2. Install External Dependencies
 
-   # Install external tools (Ubuntu/Debian)
-   sudo apt install ffmpeg texlive-latex-extra gnuplot
-   ```
+**Windows:**
+1. Install [Python 3.8+](https://python.org/downloads)
+2. Install [FFmpeg](https://ffmpeg.org/download.html) and add to PATH
+3. Install [MiKTeX](https://miktex.org/) or [TeX Live](https://tug.org/texlive/) for LaTeX
+4. Install [gnuplot](http://www.gnuplot.info/) (optional)
 
-3. **Configuration**
-   Create config file at `~/.config/discogsDBLabelGen/discogs.env`:
-   ```json
-   {
-     "DISCOGS_USER_TOKEN": "your_discogs_token_here",
-     "LIBRARY_PATH": "~/Music/DiscogsLibrary"
-   }
-   ```
+**macOS:**
+```bash
+brew install ffmpeg mactex gnuplot
+```
 
-4. **Get Discogs Token**
-   - Go to your Discogs profile settings
-   - Generate a personal access token
-   - Add it to your config file
+**Ubuntu/Debian:**
+```bash
+sudo apt update
+sudo apt install ffmpeg texlive-latex-extra gnuplot python3-pip
+```
+
+**Arch Linux:**
+```bash
+sudo pacman -S ffmpeg texlive-most gnuplot python-pip
+```
+
+**CentOS/RHEL/Fedora:**
+```bash
+sudo dnf install ffmpeg texlive-latex gnuplot python3-pip
+```
+
+### 3. Get Discogs API Token
+
+1. Go to https://www.discogs.com/settings/developers
+2. Generate a personal access token
+3. Use the GUI (`python3 gui.py`) to configure it, or manually create the config file
+
+### 4. Configuration
+
+**Option A: GUI Configuration (Easy)**
+```bash
+python3 gui.py
+```
+Enter your token and select library folder in the interface.
+
+**Option B: Manual Configuration**
+Create `~/.config/discogsDBLabelGen/discogs.env`:
+```json
+{
+  "DISCOGS_USER_TOKEN": "your_discogs_token_here",
+  "LIBRARY_PATH": "/path/to/your/music/library"
+}
+```
 
 ## Usage
 
-### Sync Your Collection
+### GUI Mode (Recommended)
 ```bash
-# Download and analyze your entire collection
+python3 gui.py
+```
+The GUI provides:
+- Easy configuration management
+- Processing mode selection (Full/Dev/Dry Run/Custom)
+- Real-time progress monitoring
+- One-click processing
+
+### Command Line Mode
+```bash
+# Full collection sync
 python3 main.py
 
-# Process a single release for testing
-# (edit main.py to use sync_single_release(release_id))
+# Development mode (first 10 releases only)
+python3 main.py --dev
+
+# Dry run (offline processing of existing releases)
+python3 main.py --dryrun
+
+# Custom limit (e.g., first 25 releases)  
+python3 main.py --max 25
+
+# Regenerate labels only
+python3 main.py --regenerate-labels
+
+# Regenerate waveforms only
+python3 main.py --regenerate-waveforms
 ```
 
-### Generate Labels
+### Generate Printable Labels
 ```bash
-# Generate all labels
+# Generate labels for all releases
 python3 generate_labels.py
 
-# Test with first 10 releases
+# Generate first 10 releases for testing
 python3 generate_labels.py --max 10
 
 # Custom output directory
 python3 generate_labels.py --output ~/my_labels
-
-# Help and options
-python3 generate_labels.py --help
-```
-
-### Analyze Similarities
-```bash
-# Find similar tracks in your collection
-python3 similarity_analyzer.py
 ```
 
 ## File Structure
 
-Each release creates a folder with:
+Each release creates a folder:
 ```
 {release_id}_{release_title}/
-├── metadata.json              # Complete Discogs metadata
-├── cover.jpg                  # Album artwork
-├── yt_matches.json           # YouTube video matches
+├── metadata.json              # Discogs metadata
+├── cover.jpg                  # Primary album artwork
+├── cover_2.jpg, cover_3.jpg...# Additional cover images (if available)
+├── qrcode.png                 # Plain QR code linking to Discogs
+├── qrcode_fancy.png          # Fancy QR code with cover art background
+├── yt_matches.json           # YouTube matches
 ├── A1.opus, A2.opus...       # Audio files
-├── A1.json, A2.json...       # Essentia analysis data
-├── A1_waveform.png...        # Waveform visualizations
+├── A1.json, A2.json...       # Analysis data (BPM, key, etc.)
+├── A1_waveform.png...        # Waveform images for labels
 └── label.tex                 # LaTeX label snippet
 ```
 
-## Platform Compatibility
+## Configuration Template
 
-Primarily developed and tested on Linux. Should work on any Unix-like system with the required dependencies installed. Performance optimizations make it suitable for large collections (500+ releases).
+Save this as `~/.config/discogsDBLabelGen/discogs.env`:
+```json
+{
+  "DISCOGS_USER_TOKEN": "AbCdEfGhIjKlMnOpQrStUvWxYz1234567890",
+  "LIBRARY_PATH": "$HOME/Music/DiscogsLibrary"
+}
+```
 
-## Performance Notes
+Replace `AbCdEfGhIjKlMnOpQrStUvWxYz1234567890` with your actual Discogs token and adjust the library path as needed.
 
-- **Parallel Processing**: YouTube metadata fetching is now 2-3x faster
-- **Smart Caching**: Only processes new or missing data
-- **Background Processing**: Suitable for overnight runs on large collections
-- **Rate Limiting**: Respects Discogs API limits to prevent throttling
+## Label Output
 
-## Output Example
+The generated labels include:
+- Track listing with BPM and musical key
+- Waveform visualizations
+- Release information (artist, title, label, year)
+- Format optimized for 8163 shipping labels
 
-![Sample Label Output](output.jpg)
+## Troubleshooting
+
+**Common Issues:**
+- **"No module named 'essentia'"**: `pip install essentia`
+- **"ffmpeg not found"**: Install ffmpeg and ensure it's in your PATH
+- **"pdflatex not found"**: Install a LaTeX distribution (texlive/miktex)
+- **LaTeX compilation errors**: Check for special characters in track titles
+- **GUI won't start**: Ensure tkinter is installed (`sudo apt install python3-tk` on Ubuntu)
+- **Permission errors**: Make sure the library path is writable
+
+**Platform-Specific:**
+- **Windows**: Use forward slashes `/` in paths, not backslashes `\`
+- **macOS**: May need to install Xcode command line tools: `xcode-select --install`
+- **Linux**: Some distributions require separate python3-tkinter package
 
 ## License
 
-This project is open source software. See LICENSE file for details.
-
-## Contributing
-
-Pull requests and issues welcome! Areas for contribution:
-- Additional audio analysis features
-- Label design improvements
-- Performance optimizations
-- Cross-platform compatibility
+Open source software. See LICENSE file for details.
