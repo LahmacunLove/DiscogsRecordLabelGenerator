@@ -26,6 +26,10 @@ def load_config(config_path="~/.config/discogsDBLabelGen/discogs.env"):
     if "LIBRARY_PATH" in config:
         config["LIBRARY_PATH"] = os.path.expandvars(config["LIBRARY_PATH"])
     
+    # If BANDCAMP_PATH contains variables, expand them
+    if "BANDCAMP_PATH" in config:
+        config["BANDCAMP_PATH"] = os.path.expandvars(config["BANDCAMP_PATH"])
+    
     print("Configuration loaded.")
     return config
 

@@ -1,9 +1,17 @@
 \documentclass{article}
 
-% Traditional pdfLaTeX font support with Unicode input
-\usepackage[utf8]{inputenc}
-\usepackage[T1]{fontenc}
-\usepackage{lmodern}
+% XeLaTeX native Unicode support
+\usepackage{fontspec}
+\usepackage{polyglossia}
+
+% Set main language to English, with Arabic support
+\setmainlanguage{english}
+\setotherlanguage{arabic}
+
+% Font configuration for Unicode support
+\setmainfont{Latin Modern Roman}
+\setsansfont{Latin Modern Sans}
+\setmonofont{Latin Modern Mono}
 
 % DYNAMIC_PACKAGES_PLACEHOLDER
 % This will be replaced with script-specific packages based on detected Unicode scripts

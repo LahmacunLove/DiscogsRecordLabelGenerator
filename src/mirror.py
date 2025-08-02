@@ -21,10 +21,12 @@ import json
 import shutil
 import re
 from logger import logger
+from cpu_utils import get_optimal_workers
 from latex_generator import create_latex_label_file
 from qr_generator import generate_qr_code_advanced
 from utils import sanitize_filename
 from tqdm import tqdm
+import glob
 
 
 class DiscogsLibraryMirror:
@@ -41,6 +43,194 @@ class DiscogsLibraryMirror:
         if not token:
             raise ValueError("Discogs token missing in config.")
         return discogs_client.Client("DiscogsDBLabelGen/0.1", user_token=token)
+
+    def find_bandcamp_release(self, metadata):
+        """Find matching Bandcamp release using catalog numbers, artist, and title"""
+        bandcamp_path = self.config.get("BANDCAMP_PATH")
+        if not bandcamp_path:
+            logger.debug("No BANDCAMP_PATH configured")
+            return None
+        
+        bandcamp_path = Path(bandcamp_path).expanduser()
+        if not bandcamp_path.exists():
+            logger.debug(f"Bandcamp path does not exist: {bandcamp_path}")
+            return None
+        
+        # Extract metadata for matching
+        artists = metadata.get('artist', [])
+        title = metadata.get('title', '')
+        catalog_numbers = metadata.get('catalog_numbers', [])
+        
+        logger.debug(f"Searching Bandcamp for: {artists} - {title} (catalog: {catalog_numbers})")
+        
+        # Strategy 1: Try matching by catalog number first (most reliable)
+        if catalog_numbers:
+            for catno in catalog_numbers:
+                catno_clean = catno.replace('-', '').replace(' ', '').lower()
+                pattern = f"**/*{catno_clean}*"
+                matches = glob.glob(str(bandcamp_path / pattern), recursive=True)
+                for match in matches:
+                    match_path = Path(match)
+                    if match_path.is_dir():
+                        logger.info(f"Found Bandcamp release by catalog number {catno}: {match_path}")
+                        return match_path
+        
+        # Strategy 2: Try matching by artist and album title
+        if artists and title:
+            for artist in artists:
+                # Clean artist and title for pattern matching
+                artist_clean = sanitize_filename(artist).lower()
+                title_clean = sanitize_filename(title).lower()
+                
+                # Try various folder name patterns commonly used in Bandcamp downloads
+                patterns = [
+                    f"**/*{artist_clean}*{title_clean}*",
+                    f"**/*{title_clean}*{artist_clean}*",
+                    f"**/{artist_clean}*/{title_clean}*",
+                    f"**/{artist_clean} - {title_clean}*"
+                ]
+                
+                for pattern in patterns:
+                    matches = glob.glob(str(bandcamp_path / pattern), recursive=True)
+                    for match in matches:
+                        match_path = Path(match)
+                        if match_path.is_dir():
+                            logger.info(f"Found Bandcamp release by title match: {match_path}")
+                            return match_path
+        
+        logger.debug(f"No Bandcamp release found for: {artists} - {title}")
+        return None
+
+    def get_bandcamp_audio_files(self, bandcamp_folder):
+        """Get all audio files from a Bandcamp folder"""
+        if not bandcamp_folder or not bandcamp_folder.exists():
+            return []
+        
+        audio_extensions = ['.flac', '.wav', '.mp3', '.m4a', '.aiff', '.alac']
+        audio_files = []
+        
+        for ext in audio_extensions:
+            audio_files.extend(bandcamp_folder.glob(f"*{ext}"))
+            audio_files.extend(bandcamp_folder.glob(f"**/*{ext}"))
+        
+        # Sort by filename for consistent ordering
+        audio_files.sort(key=lambda x: x.name.lower())
+        
+        logger.debug(f"Found {len(audio_files)} audio files in Bandcamp folder: {bandcamp_folder}")
+        return audio_files
+
+    def copy_bandcamp_audio_to_release_folder(self, bandcamp_folder, metadata):
+        """Copy Bandcamp audio files to release folder with proper naming"""
+        audio_files = self.get_bandcamp_audio_files(bandcamp_folder)
+        if not audio_files:
+            return False
+        
+        tracklist = metadata.get('tracklist', [])
+        if not tracklist:
+            logger.warning("No tracklist available for Bandcamp audio matching")
+            return False
+        
+        logger.info(f"Copying {len(audio_files)} Bandcamp audio files to release folder")
+        
+        # Create simple mapping: assume audio files are in track order
+        copied_count = 0
+        for i, audio_file in enumerate(audio_files):
+            if i >= len(tracklist):
+                logger.warning(f"More audio files than tracks in tracklist, stopping at {i}")
+                break
+            
+            track = tracklist[i]
+            track_position = track.get('position', str(i+1))
+            
+            # Determine target filename with original extension
+            target_filename = f"{track_position}{audio_file.suffix}"
+            target_path = self.release_folder / target_filename
+            
+            try:
+                # Copy the high-quality audio file
+                import shutil
+                shutil.copy2(audio_file, target_path)
+                logger.success(f"Copied Bandcamp audio: {audio_file.name} → {target_filename}")
+                copied_count += 1
+                
+            except Exception as e:
+                logger.error(f"Failed to copy {audio_file.name}: {e}")
+                return False
+        
+        logger.success(f"Successfully copied {copied_count} Bandcamp audio files")
+        return copied_count > 0
+
+    def analyze_bandcamp_audio(self, metadata, download_only=False):
+        """Analyze Bandcamp audio files if analysis is enabled"""
+        if download_only:
+            return
+        
+        # Import audio analyzer
+        from analyzeSoundFile import analyzeAudioFileOrStream
+        
+        for track in metadata.get('tracklist', []):
+            track_position = track.get('position', '')
+            if not track_position:
+                continue
+            
+            # Find the audio file
+            audio_file = None
+            for ext in ['.flac', '.wav', '.mp3', '.m4a', '.aiff', '.alac']:
+                potential_file = self.release_folder / f"{track_position}{ext}"
+                if potential_file.exists():
+                    audio_file = potential_file
+                    break
+            
+            if not audio_file:
+                continue
+            
+            # Check what analysis is needed
+            analysis_file = self.release_folder / f"{track_position}.json"
+            waveform_file = self.release_folder / f"{track_position}_waveform.png"
+            
+            analysis_needed = not analysis_file.exists()
+            waveform_needed = not waveform_file.exists()
+            
+            if not analysis_needed and not waveform_needed:
+                continue  # Already analyzed
+            
+            try:
+                analyzer = None
+                
+                # Perform Essentia analysis (independent task)
+                if analysis_needed:
+                    logger.debug(f"Running Essentia analysis for Bandcamp audio: {audio_file.name}")
+                    analyzer = analyzeAudioFileOrStream(
+                        fileOrStream=str(audio_file),
+                        sampleRate=44100,
+                        plotWaveform=False,
+                        musicExtractor=True,
+                        plotSpectogram=True,
+                        debug=False
+                    )
+                    analyzer.readAudioFile(ffmpegUsage=False)
+                    analyzer.analyzeMusicExtractor()
+                
+                # Perform waveform generation (independent task)
+                if waveform_needed:
+                    logger.debug(f"Generating waveform for Bandcamp audio: {audio_file.name}")
+                    # Create separate analyzer if not already created
+                    if analyzer is None:
+                        analyzer = analyzeAudioFileOrStream(
+                            fileOrStream=str(audio_file),
+                            sampleRate=44100,
+                            plotWaveform=False,
+                            musicExtractor=False,  # No need for music analysis
+                            plotSpectogram=False,  # No need for spectrograms
+                            debug=False
+                        )
+                        analyzer.readAudioFile(ffmpegUsage=False)
+                    
+                    analyzer.generate_waveform_gnuplot()
+                
+            except Exception as e:
+                logger.warning(f"Failed to analyze Bandcamp audio {audio_file.name}: {e}")
+                continue
 
     def get_collection_release_ids(self):
       
@@ -78,7 +268,13 @@ class DiscogsLibraryMirror:
         for entry in self.library_path.iterdir():
             if entry.is_dir() and "_" in entry.name:
                 try:
-                    local_ids.append(int(entry.name.split("_")[0]))
+                    release_id = int(entry.name.split("_")[0])
+                    # Check if metadata.json exists in the folder
+                    metadata_file = entry / "metadata.json"
+                    if metadata_file.exists():
+                        local_ids.append(release_id)
+                    else:
+                        logger.debug(f"Folder {entry.name} exists but missing metadata.json - will be reprocessed")
                 except ValueError:
                     pass
         return local_ids
@@ -121,7 +317,7 @@ class DiscogsLibraryMirror:
 
             
             
-    def sync_releases(self, max_releases=None, download_only=False, progress_callback=None):
+    def sync_releases(self, max_releases=None, download_only=False, discogs_only=False, progress_callback=None):
         """Compares releases and saves new releases or deletes removed releases."""
         # Always load local IDs
         local_ids = set(self.get_local_release_ids())
@@ -181,12 +377,33 @@ class DiscogsLibraryMirror:
                 
         
         # Progress bar for release processing
-        mode_desc = "Downloading releases" if download_only else "Processing releases"
+        if discogs_only:
+            mode_desc = "Syncing Discogs metadata"
+        elif download_only:
+            mode_desc = "Downloading releases"
+        else:
+            mode_desc = "Processing releases"
+        
+        # Get optimal workers for release processing (I/O intensive)
+        if discogs_only:
+            # For Discogs-only mode: limit workers due to API rate limits (60/min = 1/sec)
+            # Use fewer workers but still benefit from I/O concurrency
+            optimal_workers = min(3, max(1, len(releases_to_process) // 10))
+            logger.debug(f"Discogs-only mode: using {optimal_workers} workers (rate limit: 60/min)")
+        else:
+            optimal_workers, effective_cores, logical_cores, ht_detected = get_optimal_workers(min_workers=2, max_percentage=0.6)
+            
+            if ht_detected:
+                logger.debug(f"Hyperthreading detected: {logical_cores} logical → {effective_cores} physical cores")
+            logger.debug(f"Using {optimal_workers} workers for release processing")
+        
+        # Use ThreadPoolExecutor for Discogs-only mode due to rate limits
+        executor_class = concurrent.futures.ThreadPoolExecutor if discogs_only else concurrent.futures.ProcessPoolExecutor
         
         if progress_callback:
             # GUI mode - use callback for progress reporting
-            with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
-                futures = [executor.submit(self.sync_single_release, release_id, download_only) for release_id in releases_to_process]
+            with executor_class(max_workers=optimal_workers) as executor:
+                futures = [executor.submit(self.sync_single_release, release_id, download_only, discogs_only) for release_id in releases_to_process]
                 completed = 0
                 
                 for future in concurrent.futures.as_completed(futures):
@@ -201,8 +418,8 @@ class DiscogsLibraryMirror:
         else:
             # Console mode - use tqdm
             with tqdm(total=len(releases_to_process), desc=mode_desc, unit="release") as pbar:
-                with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
-                    futures = [executor.submit(self.sync_single_release, release_id, download_only) for release_id in releases_to_process]
+                with executor_class(max_workers=optimal_workers) as executor:
+                    futures = [executor.submit(self.sync_single_release, release_id, download_only, discogs_only) for release_id in releases_to_process]
                 
                     for future in concurrent.futures.as_completed(futures):
                         try:
@@ -221,7 +438,7 @@ class DiscogsLibraryMirror:
 
             
             
-    def sync_single_release(self, release_id, download_only=False):
+    def sync_single_release(self, release_id, download_only=False, discogs_only=False):
         # Save new releases
         collectionElement = self.discogs.release(release_id)  # Get metadata here something is wrong
         timestamp = self.discogs.user(self.username).collection_items(release_id)[0].data['date_added']
@@ -232,11 +449,28 @@ class DiscogsLibraryMirror:
             logger.debug(f"Apple Music link: {collectionElement.apple}")
         except:
             pass
+        # Extract catalog numbers from labels
+        catalog_numbers = []
+        for label in collectionElement.labels:
+            try:
+                # Try to get catalog number from label data
+                if hasattr(label, 'data') and 'catno' in label.data:
+                    catno = label.data['catno']
+                    if catno and catno.strip():
+                        catalog_numbers.append(catno.strip())
+                # Try direct attribute access (newer API versions)
+                elif hasattr(label, 'catno') and label.catno:
+                    catalog_numbers.append(label.catno.strip())
+            except Exception as e:
+                logger.debug(f"Could not extract catalog number from label: {e}")
+                continue
+        
         # Collect metadata
         metadata = {
             "title": collectionElement.title,
             "artist": [r.name for r in collectionElement.artists],
             "label": [label.name for label in collectionElement.labels],
+            "catalog_numbers": catalog_numbers,
             "genres": collectionElement.genres,
             "formats": collectionElement.formats[0] if collectionElement.formats else {},
             "year": collectionElement.year,
@@ -267,18 +501,42 @@ class DiscogsLibraryMirror:
         # save coverart
         self.save_cover_art(release_id, metadata)
         
-        # do all youtube stuff
-        yt_searcher = youtube_handler.YouTubeMatcher(self.release_folder, False) # initialize yt_module
-        yt_searcher.match_discogs_release_youtube(metadata) # match metadata and save matches
+        # Discogs-only mode: skip audio processing entirely
+        if discogs_only:
+            logger.info(f"📀 Discogs-only mode: metadata and covers saved for {release_id}")
+            return
         
-        if download_only:
-            # Download-only mode: only download audio files without analysis
-            logger.info(f"[{release_id}] Download-only mode: downloading audio without analysis")
-            yt_searcher.audio_download_only(metadata)
-        else:
-            # Normal mode: download and analyze
-            yt_searcher.audio_download_analyze(metadata) # download matches
+        # Check for Bandcamp high-quality audio first
+        bandcamp_folder = self.find_bandcamp_release(metadata)
+        used_bandcamp = False
+        
+        if bandcamp_folder:
+            logger.info(f"🎵 Found Bandcamp release: {bandcamp_folder}")
+            if self.copy_bandcamp_audio_to_release_folder(bandcamp_folder, metadata):
+                logger.success(f"✅ Using high-quality Bandcamp audio for {release_id}")
+                used_bandcamp = True
+                
+                if not download_only:
+                    # Analyze Bandcamp audio files
+                    self.analyze_bandcamp_audio(metadata, download_only=False)
+            else:
+                logger.warning("⚠️ Failed to copy Bandcamp audio, falling back to YouTube")
+        
+        # Fallback to YouTube if no Bandcamp or if copy failed
+        if not used_bandcamp:
+            logger.info(f"🎬 Using YouTube audio for {release_id}")
+            yt_searcher = youtube_handler.YouTubeMatcher(self.release_folder, False) # initialize yt_module
+            yt_searcher.match_discogs_release_youtube(metadata) # match metadata and save matches
             
+            if download_only:
+                # Download-only mode: only download audio files without analysis
+                logger.info(f"[{release_id}] Download-only mode: downloading audio without analysis")
+                yt_searcher.audio_download_only(metadata)
+            else:
+                # Normal mode: download and analyze
+                yt_searcher.audio_download_analyze(metadata) # download matches
+        
+        if not download_only:
             # create qr code with cover background
             generate_qr_code_advanced(self.release_folder, release_id, metadata)
             
@@ -479,15 +737,40 @@ class DiscogsLibraryMirror:
                 continue  # Already analyzed
             
             try:
-                logger.debug(f"Analyzing audio file: {audio_file.name}")
-                analyzer = analyzeAudioFileOrStream(str(audio_file))
+                analysis_needed = not analysis_file.exists()
+                waveform_needed = not waveform_file.exists()
                 
-                # Only perform analysis if not already present
-                if not analysis_file.exists():
-                    analyzer.music_analyze()
+                analyzer = None
                 
-                # Only generate waveform if not already present
-                if not waveform_file.exists():
+                # Perform Essentia analysis (independent task)
+                if analysis_needed:
+                    logger.debug(f"Running Essentia analysis for: {audio_file.name}")
+                    analyzer = analyzeAudioFileOrStream(
+                        fileOrStream=str(audio_file),
+                        sampleRate=44100,
+                        plotWaveform=False,
+                        musicExtractor=True,
+                        plotSpectogram=True,
+                        debug=False
+                    )
+                    analyzer.readAudioFile(ffmpegUsage=False)
+                    analyzer.analyzeMusicExtractor()
+                
+                # Perform waveform generation (independent task)
+                if waveform_needed:
+                    logger.debug(f"Generating waveform for: {audio_file.name}")
+                    # Create separate analyzer if not already created
+                    if analyzer is None:
+                        analyzer = analyzeAudioFileOrStream(
+                            fileOrStream=str(audio_file),
+                            sampleRate=44100,
+                            plotWaveform=False,
+                            musicExtractor=False,  # No need for music analysis
+                            plotSpectogram=False,  # No need for spectrograms
+                            debug=False
+                        )
+                        analyzer.readAudioFile(ffmpegUsage=False)
+                    
                     analyzer.generate_waveform_gnuplot()
                     
             except Exception as e:
@@ -617,4 +900,45 @@ class DiscogsLibraryMirror:
                 continue
             
         return
+    
+    def process_single_release_offline(self, release_id):
+        """Process a single release offline without Discogs/YouTube sync"""
+        try:
+            # Find release folder
+            release_folder = None
+            for item in self.library_path.iterdir():
+                if item.is_dir() and item.name.startswith(f"{release_id}_"):
+                    release_folder = item
+                    break
+            else:
+                logger.error(f"Release folder not found for ID: {release_id}")
+                return False
+            
+            # Load metadata
+            metadata_file = release_folder / 'metadata.json'
+            if not metadata_file.exists():
+                logger.error(f"No metadata.json found for release {release_id}")
+                return False
+            
+            with open(metadata_file, 'r', encoding='utf-8') as f:
+                metadata = json.load(f)
+            
+            logger.info(f"Processing release offline: {metadata.get('title', 'Unknown Title')}")
+            
+            # Set release folder for other methods
+            self.release_folder = release_folder
+            
+            # Process audio analysis
+            self._process_audio_analysis_offline(metadata)
+            
+            # Generate LaTeX label and QR code
+            self._generate_latex_label(metadata)
+            self._generate_qr_code(metadata)
+            
+            logger.success(f"✅ Completed offline processing for release {release_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error processing release {release_id} offline: {e}")
+            return False
             

@@ -22,7 +22,7 @@ def gui_progress(current, total, phase="Processing"):
     percentage = (current / total) * 100 if total > 0 else 0
     print(f"GUI_PROGRESS: {percentage:.1f}% ({current}/{total}) - {phase}", flush=True)
 
-def generate_final_labels(library_mirror):
+def generate_final_labels(library_mirror, specific_release_id=None):
     """Generate combined LaTeX labels after successful sync"""
     try:
         logger.separator("Generating Final Labels")
@@ -37,7 +37,7 @@ def generate_final_labels(library_mirror):
             library_path=library_path,
             output_dir=output_dir,
             max_labels=None,  # Generate all labels
-            specific_release=None,
+            specific_release=specific_release_id,
             since_date=None
         )
         
@@ -111,6 +111,19 @@ def main():
         help='Download-only mode: sync releases and download covers/audio without analysis or label generation'
     )
     
+    parser.add_argument(
+        '--discogs-only',
+        action='store_true',
+        help='Discogs-only mode: sync releases and download metadata/covers only (no YouTube, no Bandcamp, no analysis)'
+    )
+    
+    parser.add_argument(
+        '--release-id',
+        type=str,
+        default=None,
+        help='Process specific release by Discogs release ID (e.g. --release-id 123456)'
+    )
+    
     args = parser.parse_args()
     
     # Store start time
@@ -120,7 +133,29 @@ def main():
     library_mirror = DiscogsLibraryMirror()
     
     # Handle special modes
-    if args.regenerate_labels or args.regenerate_waveforms:
+    if args.release_id:
+        # Process specific release ID
+        logger.separator(f"Processing specific release ID: {args.release_id}")
+        
+        if args.dryrun:
+            logger.info("Dry run mode for specific release - processing offline")
+            library_mirror.process_single_release_offline(args.release_id)
+            # Generate labels for specific release
+            generate_final_labels(library_mirror, specific_release_id=args.release_id)
+        elif args.discogs_only:
+            logger.info("Discogs-only mode for specific release")
+            library_mirror.sync_single_release(args.release_id, discogs_only=True)
+        elif args.download_only:
+            logger.info("Download-only mode for specific release")
+            library_mirror.sync_single_release(args.release_id, download_only=True)
+        else:
+            logger.info("Full processing for specific release")
+            library_mirror.sync_single_release(args.release_id, download_only=False)
+            
+            # Generate labels for specific release
+            generate_final_labels(library_mirror, specific_release_id=args.release_id)
+            
+    elif args.regenerate_labels or args.regenerate_waveforms:
         if args.regenerate_labels and args.regenerate_waveforms:
             logger.separator("Regenerating all LaTeX labels and waveforms")
         elif args.regenerate_labels:
@@ -138,6 +173,20 @@ def main():
         
         # Generate labels after dry run processing
         generate_final_labels(library_mirror)
+    elif args.discogs_only:
+        # Determine limit for Discogs-Only Mode
+        limit = None
+        if args.max:
+            limit = args.max
+            logger.separator(f"Discogs-Only Mode - Syncing {limit} releases (metadata/covers only)")
+        elif args.dev:
+            limit = 10
+            logger.separator("Discogs-Only Mode - Development (10 releases, metadata/covers only)")
+        else:
+            logger.separator("Discogs-Only Mode - Full Collection (metadata/covers only)")
+        
+        progress_cb = gui_progress if args.gui_mode else None
+        library_mirror.sync_releases(max_releases=limit, discogs_only=True, progress_callback=progress_cb)
     elif args.download_only:
         # Determine limit for Download-Only Mode
         limit = None

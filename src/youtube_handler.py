@@ -10,6 +10,7 @@ from logger import logger
 import concurrent.futures
 import threading
 from utils import sanitize_filename
+from cpu_utils import get_optimal_workers
 
 def _analyze_track_standalone(task):
     """Standalone function for parallel track analysis"""
@@ -41,29 +42,41 @@ def _analyze_track_standalone(task):
                 'error': 'Already analyzed'
             }
         
-        # Create analyzer
-        analyzer = analyzeAudioFileOrStream(
-            fileOrStream=audio_file,
-            sampleRate=44100,
-            plotWaveform=False,
-            musicExtractor=True,
-            plotSpectogram=True,
-            debug=False
-        )
+        analyzer = None
         
-        logger.analyze(f"[{release_info}] Analyzing track {track_position}")
-        
-        # Perform Essentia analysis
+        # Perform Essentia analysis (independent task)
         if analysis_needed:
             logger.process(f"[{release_info}] Running Essentia analysis for track {track_position}")
+            analyzer = analyzeAudioFileOrStream(
+                fileOrStream=audio_file,
+                sampleRate=44100,
+                plotWaveform=False,
+                musicExtractor=True,
+                plotSpectogram=True,
+                debug=False
+            )
             analyzer.readAudioFile(ffmpegUsage=False)
             analyzer.analyzeMusicExtractor()
+            logger.success(f"[{release_info}] Essentia analysis completed for track {track_position}")
         
-        # Perform waveform generation
+        # Perform waveform generation (independent task)
         if waveform_needed:
             try:
                 logger.process(f"[{release_info}] Generating waveform for track {track_position}")
+                # Create separate analyzer instance if not already created
+                if analyzer is None:
+                    analyzer = analyzeAudioFileOrStream(
+                        fileOrStream=audio_file,
+                        sampleRate=44100,
+                        plotWaveform=False,
+                        musicExtractor=False,  # No need for music analysis
+                        plotSpectogram=False,  # No need for spectrograms
+                        debug=False
+                    )
+                    analyzer.readAudioFile(ffmpegUsage=False)
+                
                 analyzer.generate_waveform_gnuplot()
+                logger.success(f"[{release_info}] Waveform generation completed for track {track_position}")
             except Exception as e:
                 logger.warning(f"[{release_info}] Waveform generation failed for track {track_position}: {e}")
         
@@ -203,33 +216,77 @@ class YouTubeMatcher:
                     if i == 0:
                         video_info.append(video)
             
-                    title_score = fuzz.WRatio(track_title.lower(), video_title.lower())
-                    title_artist_score = fuzz.WRatio(f"{track_title.lower()} - {track_artist.lower()}", video_title.lower())
+                    # Duration filter: reject videos with extreme duration differences
                     if track_duration and video_duration:
-                        diff = abs(track_duration - video_duration)
-                        duration_score = max(0, 1 - (diff / max(track_duration, 1)))
-                        score = title_score + title_artist_score + duration_score
+                        duration_ratio = video_duration / track_duration if track_duration > 0 else float('inf')
+                        if duration_ratio > 2.0 or duration_ratio < 0.5:
+                            # Video is more than double or less than half the track duration - completely exclude
+                            logger.debug(f"Rejecting video '{video_title}' for track '{track_title}': "
+                                       f"duration ratio {duration_ratio:.2f} (video: {video_duration}s, track: {track_duration}s)")
+                            score = float('inf')  # Use infinity to completely exclude from Hungarian algorithm
+                        else:
+                            # Normal scoring with duration consideration
+                            title_score = fuzz.WRatio(track_title.lower(), video_title.lower())
+                            title_artist_score = fuzz.WRatio(f"{track_title.lower()} - {track_artist.lower()}", video_title.lower())
+                            diff = abs(track_duration - video_duration)
+                            duration_score = max(0, 100 - (diff / max(track_duration, 1)) * 100)  # Scale to 0-100
+                            score = title_score + title_artist_score + duration_score
                     else:
+                        # No duration info available - use only title/artist scoring
+                        title_score = fuzz.WRatio(track_title.lower(), video_title.lower())
+                        title_artist_score = fuzz.WRatio(f"{track_title.lower()} - {track_artist.lower()}", video_title.lower())
                         score = title_score + title_artist_score
             
-                    score_matrix[i][j] = -score  # Note: scipy searches for minimum → we negate
+                    score_matrix[i][j] = score if score != float('inf') else float('inf')  # Keep infinity for excluded matches
             
-            # Calculate optimal matching
-            track_indices, video_indices = linear_sum_assignment(score_matrix)
+            # Check if the matrix is solvable - Hungarian algorithm fails when there are more tracks than videos
+            # or when too many entries are infinite
+            try:
+                # Calculate optimal matching
+                track_indices, video_indices = linear_sum_assignment(score_matrix)
+                assignment_successful = True
+            except ValueError as e:
+                logger.warning(f"Hungarian algorithm failed: {e}")
+                logger.warning("Creating empty matches for all tracks")
+                assignment_successful = False
+                
+                # Create empty matches for all tracks
+                for i, (track_title, track_duration, track_position) in enumerate(track_info):
+                    self.matches.append({
+                        'discogs_track': track_title,
+                        'discogs_duration': track_duration,
+                        'track_position': track_position,
+                        'youtube_match': None,
+                        'match_score': 0.0
+                    })
             
-            # Save results
-            for i, j in zip(track_indices, video_indices):
-                track_title, track_duration, track_position = track_info[i]
-                matched_video = video_info[j]
-                final_score = -score_matrix[i][j]  # make positive again
-            
-                self.matches.append({
-                    'discogs_track': track_title,
-                    'discogs_duration': track_duration,
-                    'track_position': track_position,
-                    'youtube_match': matched_video,
-                    'match_score': round(final_score, 3)
-                })
+            if assignment_successful:
+                
+                # Save results - exclude tracks with no valid matches (infinity scores)
+                for i, j in zip(track_indices, video_indices):
+                    track_title, track_duration, track_position = track_info[i]
+                    
+                    # Check if this assignment has an infinite score (no valid match)
+                    if score_matrix[i][j] == float('inf'):
+                        logger.warning(f"No valid YouTube match found for track '{track_title}' (all videos rejected by duration filter)")
+                        self.matches.append({
+                            'discogs_track': track_title,
+                            'discogs_duration': track_duration,
+                            'track_position': track_position,
+                            'youtube_match': None,  # No match
+                            'match_score': 0.0
+                        })
+                    else:
+                        matched_video = video_info[j]
+                        final_score = score_matrix[i][j]  # Score is already positive now
+                        
+                        self.matches.append({
+                            'discogs_track': track_title,
+                            'discogs_duration': track_duration,
+                            'track_position': track_position,
+                            'youtube_match': matched_video,
+                            'match_score': round(final_score, 3)
+                        })
 
             # Save as JSON
             with open(os.path.join(self.release_folder,"yt_matches.json"), "w", encoding="utf-8") as f:
@@ -448,12 +505,13 @@ class YouTubeMatcher:
         release_folder_name = os.path.basename(self.release_folder)
         
         # Optimal number of processes for CPU-intensive Essentia analysis
-        # Use 80% of CPU cores, but not more than available tracks
-        cpu_cores = os.cpu_count() or 2
-        optimal_workers = max(1, int(cpu_cores * 0.8))  # 80% of cores for better system stability
+        # Use hyperthreading-aware detection for better performance
+        optimal_workers, effective_cores, logical_cores, ht_detected = get_optimal_workers(min_workers=1, max_percentage=0.8)
         max_workers = min(len(downloaded_tracks), optimal_workers)
         
-        logger.info(f"🔄 [{release_folder_name}] Starting parallel analysis with {max_workers}/{cpu_cores} processes")
+        if ht_detected:
+            logger.info(f"🔄 [{release_folder_name}] Hyperthreading detected: {logical_cores} logical → {effective_cores} physical cores")
+        logger.info(f"🔄 [{release_folder_name}] Starting parallel analysis with {max_workers}/{effective_cores} processes")
         analysis_start = time.time()
         
         # Prepare data for parallel processing
