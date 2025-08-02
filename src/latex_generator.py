@@ -430,6 +430,21 @@ def _create_label_original(release_folder, metadata, label_file):
         else:
             label_str = str(labels)
         
+        # Catalog numbers
+        catalog_numbers = metadata.get('catalog_numbers', [])
+        if isinstance(catalog_numbers, list):
+            catalog_str = ', '.join(catalog_numbers)
+        else:
+            catalog_str = str(catalog_numbers) if catalog_numbers else ''
+        
+        # Genres
+        genres = metadata.get('genres', [])
+        if isinstance(genres, list):
+            # Limit to first 2-3 genres to avoid overly long footline
+            genre_str = ', '.join(genres[:3])
+        else:
+            genre_str = str(genres) if genres else ''
+        
         # Year and release ID
         year = str(metadata.get('year', ''))
         release_id = str(metadata.get('id', ''))
@@ -454,7 +469,7 @@ def _create_label_original(release_folder, metadata, label_file):
     \\vfill
 
     \\raggedright
-    \\tiny{{\\textbf{{{unicode_to_latex(label_str)}}}, {year}, Release ID: {release_id}}}
+    \\tiny{{\\textbf{{{unicode_to_latex(label_str)}}}{', ' + unicode_to_latex(catalog_str) if catalog_str else ''}, {year}{', ' + unicode_to_latex(genre_str) if genre_str else ''}, Release ID: {release_id}}}
 \\end{{minipage}}"""
         
         # latex_content = f"""\\begin{{fitbox}}{{9.5cm}}{{4.5cm}}
