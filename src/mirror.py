@@ -262,6 +262,7 @@ class DiscogsLibraryMirror:
         return name.strip(replace_with)
 
     def get_local_release_ids(self):
+        """Get release IDs that are completely processed through all pipeline steps."""
         if not self.library_path.exists():
             return []
         local_ids = []
@@ -269,15 +270,92 @@ class DiscogsLibraryMirror:
             if entry.is_dir() and "_" in entry.name:
                 try:
                     release_id = int(entry.name.split("_")[0])
-                    # Check if metadata.json exists in the folder
-                    metadata_file = entry / "metadata.json"
-                    if metadata_file.exists():
+                    
+                    # Check for complete processing pipeline
+                    if self._is_release_complete(entry):
                         local_ids.append(release_id)
                     else:
-                        logger.debug(f"Folder {entry.name} exists but missing metadata.json - will be reprocessed")
+                        logger.debug(f"Release {entry.name} incomplete - will be reprocessed")
                 except ValueError:
                     pass
         return local_ids
+
+    def _is_release_complete(self, release_dir):
+        """Check if a release has completed all processing steps."""
+        try:
+            # Step 1: Metadata from Discogs
+            metadata_file = release_dir / "metadata.json"
+            if not metadata_file.exists():
+                return False
+            
+            # Step 1b: Cover image
+            cover_file = release_dir / "cover.jpg"
+            if not cover_file.exists():
+                return False
+            
+            # Step 1c: QR code
+            qr_file = release_dir / "qrcode.png"
+            if not qr_file.exists():
+                return False
+            
+            # Step 1d: Fancy QR code
+            qr_fancy_file = release_dir / "qrcode_fancy.png"
+            if not qr_fancy_file.exists():
+                return False
+            
+            # Step 2: YouTube videos matched
+            yt_matches_file = release_dir / "yt_matches.json"
+            if not yt_matches_file.exists():
+                return False
+            
+            # Load metadata to get expected tracks
+            import json
+            with open(metadata_file, 'r', encoding='utf-8') as f:
+                metadata = json.load(f)
+            
+            tracklist = metadata.get('tracklist', [])
+            if not tracklist:
+                # No tracks expected, but basic files should exist
+                return True
+            
+            # Check each track for complete processing
+            for track in tracklist:
+                track_pos = track.get('position', '')
+                if not track_pos:
+                    continue
+                
+                # Step 3: Audio downloaded
+                audio_file = release_dir / f"{track_pos}.opus"
+                if not audio_file.exists():
+                    return False
+                
+                # Step 4: Analysis JSON
+                analysis_file = release_dir / f"{track_pos}.json"
+                if not analysis_file.exists():
+                    return False
+                
+                # Step 5: Spectrograms
+                mel_spectro = release_dir / f"{track_pos}_Mel-spectogram.png"
+                hpcp_spectro = release_dir / f"{track_pos}_HPCP_chromatogram.png"
+                if not mel_spectro.exists() or not hpcp_spectro.exists():
+                    return False
+                
+                # Step 6: Waveform
+                waveform_file = release_dir / f"{track_pos}_waveform.png"
+                if not waveform_file.exists():
+                    return False
+            
+            # Step 7: LaTeX file
+            latex_file = release_dir / "label.tex"
+            if not latex_file.exists():
+                return False
+            
+            # All steps complete!
+            return True
+            
+        except Exception as e:
+            logger.debug(f"Error checking release completeness for {release_dir.name}: {e}")
+            return False
 
     def get_diff(self):
         discogs_ids = set(self.get_collection_release_ids())

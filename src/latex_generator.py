@@ -205,46 +205,98 @@ def unicode_to_latex(text):
     
     return result
 
-def musical_key_to_latex(key):
-    """Specialized function for musical keys in LaTeX"""
+def musical_key_to_camelot(key):
+    """Convert musical key to Camelot notation for DJ use"""
     if pd.isna(key) or key == '':
         return ''
     
-    # Convert to string
-    result = str(key).strip()
+    # Convert to string and normalize
+    key_str = str(key).strip().upper()
     
-    # Remove only truly problematic Unicode characters
-    # IMPORTANT: Do NOT remove Arabic text shaping characters (U+200C, U+200D)
+    # Remove problematic Unicode characters
     invisible_chars = {
-        '\u200b': '',  # Zero-width space (U+200B) - safe to remove
-        # '\u200c': '',  # Zero-width non-joiner (U+200C) - KEEP for Arabic
-        # '\u200d': '',  # Zero-width joiner (U+200D) - KEEP for Arabic  
-        '\u2060': '',  # Word joiner (U+2060)
-        '\ufeff': '',  # Byte order mark (U+FEFF)
-        '\u00ad': '',  # Soft hyphen (U+00AD)
+        '\u200b': '',  # Zero-width space
+        '\u2060': '',  # Word joiner
+        '\ufeff': '',  # Byte order mark
+        '\u00ad': '',  # Soft hyphen
     }
     
     for char, replacement in invisible_chars.items():
-        result = result.replace(char, replacement)
+        key_str = key_str.replace(char, replacement)
     
-    # Handle musical notation (without other LaTeX escaping)
+    # Normalize musical notation
+    key_str = key_str.replace('♯', '#').replace('♭', 'B').replace('#', '#').replace('b', 'B')
+    
+    # Camelot wheel mapping
+    # Major keys (outer wheel) = A notation
+    # Minor keys (inner wheel) = B notation  
+    camelot_major = {
+        'C': '8A', 'C#': '3A', 'DB': '3A',
+        'D': '10A', 'D#': '5A', 'EB': '5A', 
+        'E': '12A', 'F': '7A',
+        'F#': '2A', 'GB': '2A', 'G': '9A',
+        'G#': '4A', 'AB': '4A', 'A': '11A',
+        'A#': '6A', 'BB': '6A', 'B': '1A'
+    }
+    
+    camelot_minor = {
+        'C': '5B', 'C#': '12B', 'DB': '12B',
+        'D': '7B', 'D#': '2B', 'EB': '2B',
+        'E': '9B', 'F': '4B',
+        'F#': '11B', 'GB': '11B', 'G': '6B',
+        'G#': '1B', 'AB': '1B', 'A': '8B',
+        'A#': '3B', 'BB': '3B', 'B': '10B'
+    }
+    
+    # Parse key format (handle various formats)
+    import re
+    
+    # Pattern for key detection: root note + optional accidental + optional mode
+    pattern = r'^([A-G])([#B]?)(?:M|MAJ|MAJOR|MIN|MINOR|m)?$'
+    match = re.match(pattern, key_str)
+    
+    if not match:
+        # If no match, return original key for LaTeX display
+        return musical_key_to_latex_fallback(key)
+    
+    root = match.group(1)
+    accidental = match.group(2) if match.group(2) else ''
+    
+    # Determine if minor based on original key string
+    is_minor = ('m' in str(key).lower() and 'maj' not in str(key).lower()) or 'minor' in str(key).lower()
+    
+    # Create lookup key
+    lookup_key = root + accidental
+    
+    # Get Camelot notation
+    if is_minor:
+        camelot = camelot_minor.get(lookup_key, '')
+    else:
+        camelot = camelot_major.get(lookup_key, '')
+    
+    if camelot:
+        return camelot
+    else:
+        # Fallback to original LaTeX formatting if no Camelot match
+        return musical_key_to_latex_fallback(key)
+
+def musical_key_to_latex_fallback(key):
+    """Fallback function for non-Camelot musical key LaTeX formatting"""
+    if pd.isna(key) or key == '':
+        return ''
+    
+    result = str(key).strip()
+    
+    # Handle musical notation for LaTeX
     import re
     
     # Treat "b" as flat only when it follows a tone letter
-    # but not for "bm" (b-minor) or "Bm" (B-minor)
-    # Pattern: tone letter + b (but not bm)
     pattern = r'([A-Ga-g])b(?!m)'
     result = re.sub(pattern, r'\1$\\flat$', result)
     
-    # Direct musical replacements
+    # Musical symbol replacements
     musical_replacements = {
-        # Unicode musical symbols
-        '♯': '$\\sharp$',      # Unicode sharp
-        '♭': '$\\flat$',       # Unicode flat  
-        '♮': '$\\natural$',    # Unicode natural
-        
-        # ASCII sharp (# → ♯)
-        '#': '$\\sharp$',
+        '♯': '$\\sharp$', '♭': '$\\flat$', '♮': '$\\natural$', '#': '$\\sharp$',
     }
     
     # Now the direct replacements
@@ -299,6 +351,26 @@ def _create_label_original(release_folder, metadata, label_file):
     try:
         logger.process(f"Creating original LaTeX label for release {metadata.get('id', 'unknown')}")
         
+        # Load YouTube matches for duration fallback
+        yt_matches_file = os.path.join(release_folder, "yt_matches.json")
+        youtube_durations = {}
+        if os.path.exists(yt_matches_file):
+            try:
+                with open(yt_matches_file, 'r', encoding='utf-8') as f:
+                    yt_matches = json.load(f)
+                # Create mapping from track position to YouTube duration
+                for match in yt_matches:
+                    track_pos = match.get('track_position')
+                    youtube_match = match.get('youtube_match')
+                    if track_pos and youtube_match and youtube_match.get('length'):
+                        # Convert seconds to MM:SS format
+                        duration_seconds = youtube_match['length']
+                        minutes = duration_seconds // 60
+                        seconds = duration_seconds % 60
+                        youtube_durations[track_pos] = f"{minutes}:{seconds:02d}"
+            except Exception as e:
+                logger.debug(f"Error loading YouTube matches for duration fallback: {e}")
+        
         # Create DataFrame for tracks (as in original)
         tracks_data = []
         for track in metadata.get('tracklist', []):
@@ -306,6 +378,11 @@ def _create_label_original(release_folder, metadata, label_file):
             track_title = track.get('title', '')
             track_artist = track.get('artist', '')
             track_duration = track.get('duration', '')
+            
+            # Use YouTube duration as fallback if Discogs duration is missing
+            if not track_duration or track_duration.strip() == '':
+                if track_pos in youtube_durations:
+                    track_duration = youtube_durations[track_pos]
             
             # Search for analysis data
             track_base = os.path.join(release_folder, track_pos)
@@ -376,29 +453,47 @@ def _create_label_original(release_folder, metadata, label_file):
             if col in track_df.columns:
                 track_df[col] = track_df[col].apply(unicode_to_latex)
         
-        # Special handling for Key column with musical notation
+        # Special handling for Key column - convert to Camelot notation
         if 'key' in track_df.columns:
-            track_df['key'] = track_df['key'].apply(musical_key_to_latex)
+            track_df['key'] = track_df['key'].apply(musical_key_to_camelot)
+        
+        # Check if any tracks have durations (excluding empty strings)
+        has_durations = track_df['duration'].notna() & (track_df['duration'] != '')
+        has_any_duration = has_durations.any()
         
         # Original Various Artists handling
         unique_artists = track_df['artist'].unique()
         if len(unique_artists) == 1:
             # Only one artist - hide artist column (original logic)
-            columns_to_show = ['pos', 'title', 'duration', 'bpm', 'key', 'waveform']
+            if has_any_duration:
+                # Include duration column at the end
+                columns_to_show = ['pos', 'title', 'bpm', 'key', 'waveform', 'duration']
+                column_format = "@{}l@{\\hspace{3pt}}X@{\\hspace{3pt}}l@{\\hspace{3pt}}l@{\\hspace{2pt}}c@{\\hspace{3pt}}l@{}"
+            else:
+                # Exclude duration column
+                columns_to_show = ['pos', 'title', 'bpm', 'key', 'waveform']
+                column_format = "@{}l@{\\hspace{3pt}}X@{\\hspace{3pt}}l@{\\hspace{3pt}}l@{\\hspace{2pt}}c@{}"
         else:
             # Multiple artists - combine title and artist (original behavior)
             track_df['title'] = track_df['title'] + ' / ' + track_df['artist']
-            columns_to_show = ['pos', 'title', 'duration', 'bpm', 'key', 'waveform']
+            if has_any_duration:
+                # Include duration column at the end
+                columns_to_show = ['pos', 'title', 'bpm', 'key', 'waveform', 'duration']
+                column_format = "@{}l@{\\hspace{3pt}}X@{\\hspace{3pt}}l@{\\hspace{3pt}}l@{\\hspace{2pt}}c@{\\hspace{3pt}}l@{}"
+            else:
+                # Exclude duration column
+                columns_to_show = ['pos', 'title', 'bpm', 'key', 'waveform']
+                column_format = "@{}l@{\\hspace{3pt}}X@{\\hspace{3pt}}l@{\\hspace{3pt}}l@{\\hspace{2pt}}c@{}"
         
         # Filter DataFrame
         track_df_display = track_df[columns_to_show]
         
-        # LaTeX table with optimized column spacing (clean look)
+        # LaTeX table with dynamic column format
         latex_table = track_df_display.to_latex(
             index=False,
             header=False,  # Remove table header
             escape=False,  # Important: Let LaTeX commands through
-            column_format="@{}l@{\\hspace{3pt}}X@{\\hspace{3pt}}l@{\\hspace{3pt}}l@{\\hspace{3pt}}l@{\\hspace{2pt}}c@{}"  # More flexible spacing for better readability
+            column_format=column_format
         )
         
         # Remove all horizontal lines manually
@@ -450,59 +545,38 @@ def _create_label_original(release_folder, metadata, label_file):
         release_id = str(metadata.get('id', ''))
         
         # Minipage method with proper adjustbox structure
-        latex_content = f"""\\begin{{minipage}}[t][4.5cm][t]{{9.5cm}}
+        latex_content = f"""\\begin{{minipage}}[t][4.4cm][t]{{9.5cm}}
 
-    \\begin{{adjustbox}}{{max width=8cm}}
-      \\textbf{{{unicode_to_latex(artist_str)}}} 
-    \\end{{adjustbox}} \\\\
-    
-    \\begin{{adjustbox}}{{max width=8cm}}
-      {unicode_to_latex(title)}
-    \\end{{adjustbox}}    
+\\begin{{adjustbox}}{{max width=8cm}}
+  \\textbf{{{unicode_to_latex(artist_str)}}} 
+\\end{{adjustbox}} \\\\
 
-    \\vspace{{0.5cm}}
+\\begin{{adjustbox}}{{max width=8cm}}
+  {unicode_to_latex(title)}
+\\end{{adjustbox}}    
 
-    \\vfill
-    \\centering
-    \\scriptsize
-    {latex_table}
-    \\vfill
+\\vspace{{.4cm}}
 
-    \\raggedright
-    \\tiny{{\\textbf{{{unicode_to_latex(label_str)}}}{', ' + unicode_to_latex(catalog_str) if catalog_str else ''}, {year}{', ' + unicode_to_latex(genre_str) if genre_str else ''}, Release ID: {release_id}}}
+\\vfill
+\\begin{{adjustbox}}{{max height=1.4cm}}
+\\scriptsize
+{latex_table}
+\\end{{adjustbox}}
+\\vfill
+
+\\raggedright
+\\tiny{{\\textbf{{{unicode_to_latex(label_str)}}}{', ' + unicode_to_latex(catalog_str) if catalog_str else ''}, {year}{', ' + unicode_to_latex(genre_str) if genre_str else ''}, Release ID: {release_id}}}
 \\end{{minipage}}"""
-        
-        # latex_content = f"""\\begin{{fitbox}}{{9.5cm}}{{4.5cm}}
-        # \\textbf{{{unicode_to_latex(artist_str)}}}\\\\[0.3em]
-        # {unicode_to_latex(title)}
-        # \\hfill
-        # \\scriptsize
-        # {latex_table}
-        # \\hfill
-        # \\raggedright
-        # \\tiny{{\\textbf{{{unicode_to_latex(label_str)}}}, {year}, Release ID: \\href{{https://www.discogs.com/release/{release_id}}}{{{release_id}}}}}
-        # \\end{{fitbox}}"""
-        
-        # NEW: LaTeX-Content without fitbox - using minipage for fixed size
-#         latex_content = f"""\\begin{{minipage}}{{3.5in}}{{2in}}
-# \\textbf{{{unicode_to_latex(artist_str)}}}\\ bla \\[0.2em]
-# {unicode_to_latex(title)}
 
-# \\vspace{{0.3em}}
-# \\scriptsize
-# {latex_table}
 
-# \\vfill
-# \\raggedright
-# \\tiny{{\\textbf{{{unicode_to_latex(label_str)}}}, {year}, Release ID: {release_id}}}
-# \\end{{minipage}}"""
-        
+# \adjustbox{width=5cm, height=3cm}{\includegraphics{bild.png}}
+
         # Write LaTeX file
         with open(label_file, 'w', encoding='utf-8') as f:
             f.write(latex_content)
         
-        # Adapted tabularx conversion for minipage (3.5in = approx. 8.9cm)
-        inplace_change(label_file, "\\begin{tabular}", "\\begin{tabularx}{3.4in}")
+        # Adapted tabularx conversion for minipage (3.74in = approx. 9.5cm, +8mm from original)
+        inplace_change(label_file, "\\begin{tabular}", "\\begin{tabularx}{3.74in}")
         inplace_change(label_file, "\\end{tabular}", "\\end{tabularx}")
         
         logger.success(f"Original LaTeX label created: {os.path.basename(label_file)}")
@@ -710,16 +784,16 @@ def combine_latex_labels(library_path, output_dir, max_labels=None, specific_rel
                                 qr_file = qr_plain_file
                                 
                             if qr_file:
-                                qr_x = x_pos + 3.3
-                                qr_y = y_pos - 0.36 + 2
+                                qr_x = x_pos + 3.25
+                                qr_y = y_pos - 0.36 + 1.975
                                 # Absolute path to QR code file
                                 qr_path = os.path.abspath(qr_file).replace('\\', '/')
                                 f.write(f"\\node[right,align=left] at ({qr_x} in, {qr_y} in){{")
                                 f.write(f"\\includegraphics[width=1.5cm]{{{qr_path}}}}};\n")
                             
-                            # Include label content
-                            content_x = x_pos
-                            content_y = y_pos + 1
+                            # Include label content and some small adjustment: (this is where to play around to make it fit)
+                            content_x = x_pos + .105
+                            content_y = y_pos + 0.975
                             # Absolute path to label file
                             label_path = os.path.abspath(os.path.join(library_path, release_dir, label_filename)).replace('\\', '/')
                             f.write(f"\t\\node[right,align=left] at ({content_x} in, {content_y} in){{\n")

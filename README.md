@@ -188,9 +188,9 @@ The generated labels include:
 
 ### Preview
 
-![Label Sample 1](sample.jpg)
+![Label Sample 1](sample.png)
 
-![Label Sample 2](sample2.jpg)
+![Label Sample 2](sample2.png)
 
 ## Troubleshooting
 
