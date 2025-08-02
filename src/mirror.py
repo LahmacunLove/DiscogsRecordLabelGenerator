@@ -517,58 +517,79 @@ class DiscogsLibraryMirror:
             
             
     def sync_single_release(self, release_id, download_only=False, discogs_only=False):
-        # Save new releases
-        collectionElement = self.discogs.release(release_id)  # Get metadata here something is wrong
-        timestamp = self.discogs.user(self.username).collection_items(release_id)[0].data['date_added']
+        # Check if metadata.json already exists to avoid unnecessary Discogs API calls
+        title_placeholder = str(release_id)  # Temporary title for folder detection
+        potential_folders = [f for f in self.library_path.iterdir() 
+                           if f.is_dir() and f.name.startswith(f"{release_id}_")]
         
-        logger.debug(f"Processing release: {collectionElement.url}")
+        metadata = None
+        if potential_folders:
+            # Found existing folder - check for metadata.json
+            release_folder = potential_folders[0]
+            metadata_file = release_folder / "metadata.json"
+            if metadata_file.exists():
+                # Load existing metadata instead of calling Discogs API
+                try:
+                    with open(metadata_file, 'r', encoding='utf-8') as f:
+                        metadata = json.load(f)
+                    logger.debug(f"Using existing metadata for release {release_id} (avoiding Discogs API call)")
+                except Exception as e:
+                    logger.warning(f"Failed to load existing metadata for {release_id}, fetching from Discogs: {e}")
+                    metadata = None
         
-        try:
-            logger.debug(f"Apple Music link: {collectionElement.apple}")
-        except:
-            pass
-        # Extract catalog numbers from labels
-        catalog_numbers = []
-        for label in collectionElement.labels:
-            try:
-                # Try to get catalog number from label data
-                if hasattr(label, 'data') and 'catno' in label.data:
-                    catno = label.data['catno']
-                    if catno and catno.strip():
-                        catalog_numbers.append(catno.strip())
-                # Try direct attribute access (newer API versions)
-                elif hasattr(label, 'catno') and label.catno:
-                    catalog_numbers.append(label.catno.strip())
-            except Exception as e:
-                logger.debug(f"Could not extract catalog number from label: {e}")
-                continue
-        
-        # Collect metadata
-        metadata = {
-            "title": collectionElement.title,
-            "artist": [r.name for r in collectionElement.artists],
-            "label": [label.name for label in collectionElement.labels],
-            "catalog_numbers": catalog_numbers,
-            "genres": collectionElement.genres,
-            "formats": collectionElement.formats[0] if collectionElement.formats else {},
-            "year": collectionElement.year,
-            "id": collectionElement.id,
-            "timestamp": timestamp,
-            "videos": [video.url for video in collectionElement.videos] if hasattr(collectionElement, 'videos') else []
-        }
-
-        # Collect tracklist
-        tracklist = []
-        for track in collectionElement.tracklist:
-            track_artists = ', '.join([r.name for r in track.artists]) if hasattr(track, 'artists') else ''
-            tracklist.append({
-                "position": track.position,
-                "title": track.title,
-                "artist": track_artists,
-                "duration": track.duration
-            })
+        # Only call Discogs API if we don't have metadata
+        if metadata is None:
+            # Save new releases
+            collectionElement = self.discogs.release(release_id)  # Get metadata here something is wrong
+            timestamp = self.discogs.user(self.username).collection_items(release_id)[0].data['date_added']
             
-        metadata["tracklist"] = tracklist
+            logger.debug(f"Processing release: {collectionElement.url}")
+            
+            try:
+                logger.debug(f"Apple Music link: {collectionElement.apple}")
+            except:
+                pass
+            # Extract catalog numbers from labels
+            catalog_numbers = []
+            for label in collectionElement.labels:
+                try:
+                    # Try to get catalog number from label data
+                    if hasattr(label, 'data') and 'catno' in label.data:
+                        catno = label.data['catno']
+                        if catno and catno.strip():
+                            catalog_numbers.append(catno.strip())
+                    # Try direct attribute access (newer API versions)
+                    elif hasattr(label, 'catno') and label.catno:
+                        catalog_numbers.append(label.catno.strip())
+                except Exception as e:
+                    logger.debug(f"Could not extract catalog number from label: {e}")
+                    continue
+            
+            # Collect metadata
+            metadata = {
+                "title": collectionElement.title,
+                "artist": [r.name for r in collectionElement.artists],
+                "label": [label.name for label in collectionElement.labels],
+                "catalog_numbers": catalog_numbers,
+                "genres": collectionElement.genres,
+                "formats": collectionElement.formats[0] if collectionElement.formats else {},
+                "year": collectionElement.year,
+                "id": collectionElement.id,
+                "timestamp": timestamp,
+                "videos": [video.url for video in collectionElement.videos] if hasattr(collectionElement, 'videos') else []
+            }
+
+            # Collect tracklist
+            tracklist = []
+            for track in collectionElement.tracklist:
+                track_artists = ', '.join([r.name for r in track.artists]) if hasattr(track, 'artists') else ''
+                tracklist.append({
+                    "position": track.position,
+                    "title": track.title,
+                    "artist": track_artists,
+                    "duration": track.duration
+                })
+            metadata["tracklist"] = tracklist
         
         title = sanitize_filename(metadata.get('title', release_id))
         self.release_folder = self.library_path / f"{release_id}_{title}" 
