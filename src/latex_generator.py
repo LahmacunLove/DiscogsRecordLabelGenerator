@@ -19,18 +19,158 @@ from dateutil import parser as date_parser
 from logger import logger
 from tqdm import tqdm
 
+def detect_script(text):
+    """Detect the script/writing system of text"""
+    import re
+    
+    # Define Unicode ranges for different scripts
+    # Order matters - check specific scripts before general CJK
+    script_ranges = {
+        'arabic': r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]',
+        'cyrillic': r'[\u0400-\u04FF\u0500-\u052F\u2DE0-\u2DFF\uA640-\uA69F]',  # Russian, Bulgarian, Serbian, etc.
+        'greek': r'[\u0370-\u03FF\u1F00-\u1FFF]',  # Greek and extended Greek
+        'georgian': r'[\u10A0-\u10FF\u2D00-\u2D2F]',  # Georgian
+        'hiragana': r'[\u3040-\u309F]',  # Japanese Hiragana
+        'katakana': r'[\u30A0-\u30FF\u31F0-\u31FF]',  # Japanese Katakana
+        'hangul': r'[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F]',  # Korean
+        'cjk': r'[\u4E00-\u9FFF]',  # Chinese/Japanese Kanji (main block only)
+    }
+    
+    detected_scripts = []
+    for script, pattern in script_ranges.items():
+        if re.search(pattern, text):
+            detected_scripts.append(script)
+    
+    return detected_scripts
+
+def wrap_multilingual_text(text):
+    """Wrap text with appropriate XeLaTeX language commands for multiple scripts"""
+    import re
+    
+    # Split text around = signs and handle each part separately
+    if '=' in text:
+        parts = text.split('=')
+        wrapped_parts = []
+        for part in parts:
+            wrapped_parts.append(process_text_part(part))
+        return ' = '.join(wrapped_parts)
+    else:
+        return process_text_part(text)
+
+def process_text_part(text):
+    """Process a text part for multilingual content"""
+    import re
+    
+    scripts = detect_script(text)
+    
+    if not scripts:
+        return text  # No special scripts detected, return as-is
+    
+    # Process each script type
+    result = text
+    
+    # Arabic (RTL script)
+    if 'arabic' in scripts:
+        arabic_pattern = re.compile(r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\u200C\u200D\s،؟؛]+')
+        def replace_arabic(match):
+            arabic_text = match.group(0).strip()
+            if arabic_text:
+                return f'\\textarabic{{{arabic_text}}}'
+            return match.group(0)
+        result = arabic_pattern.sub(replace_arabic, result)
+    
+    # Cyrillic (Russian, etc.)
+    if 'cyrillic' in scripts:
+        cyrillic_pattern = re.compile(r'[\u0400-\u04FF\u0500-\u052F\u2DE0-\u2DFF\uA640-\uA69F\s]+')
+        def replace_cyrillic(match):
+            cyrillic_text = match.group(0).strip()
+            if cyrillic_text:
+                return f'\\textrussian{{{cyrillic_text}}}'
+            return match.group(0)
+        result = cyrillic_pattern.sub(replace_cyrillic, result)
+    
+    # Greek
+    if 'greek' in scripts:
+        greek_pattern = re.compile(r'[\u0370-\u03FF\u1F00-\u1FFF\s]+')
+        def replace_greek(match):
+            greek_text = match.group(0).strip()
+            if greek_text:
+                return f'\\textgreek{{{greek_text}}}'
+            return match.group(0)
+        result = greek_pattern.sub(replace_greek, result)
+    
+    # Georgian
+    if 'georgian' in scripts:
+        georgian_pattern = re.compile(r'[\u10A0-\u10FF\u2D00-\u2D2F\s]+')
+        def replace_georgian(match):
+            georgian_text = match.group(0).strip()
+            if georgian_text:
+                return f'\\textgeorgian{{{georgian_text}}}'
+            return match.group(0)
+        result = georgian_pattern.sub(replace_georgian, result)
+    
+    # CJK (Chinese/Japanese Kanji)
+    if 'cjk' in scripts:
+        cjk_pattern = re.compile(r'[\u4E00-\u9FFF\u3400-\u4DBF\u20000-\u2A6DF\u2A700-\u2B73F\u2B740-\u2B81F\u2B820-\u2CEAF\s]+')
+        def replace_cjk(match):
+            cjk_text = match.group(0).strip()
+            if cjk_text:
+                # Determine if it's more likely Chinese or Japanese context
+                # For now, default to Chinese. Could be enhanced with language detection
+                return f'\\textchinese{{{cjk_text}}}'
+            return match.group(0)
+        result = cjk_pattern.sub(replace_cjk, result)
+    
+    # Japanese Hiragana
+    if 'hiragana' in scripts:
+        hiragana_pattern = re.compile(r'[\u3040-\u309F\s]+')
+        def replace_hiragana(match):
+            hiragana_text = match.group(0).strip()
+            if hiragana_text:
+                return f'\\textjapanese{{{hiragana_text}}}'
+            return match.group(0)
+        result = hiragana_pattern.sub(replace_hiragana, result)
+    
+    # Japanese Katakana
+    if 'katakana' in scripts:
+        katakana_pattern = re.compile(r'[\u30A0-\u30FF\u31F0-\u31FF\s]+')
+        def replace_katakana(match):
+            katakana_text = match.group(0).strip()
+            if katakana_text:
+                return f'\\textjapanese{{{katakana_text}}}'
+            return match.group(0)
+        result = katakana_pattern.sub(replace_katakana, result)
+    
+    # Korean Hangul
+    if 'hangul' in scripts:
+        hangul_pattern = re.compile(r'[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F\s]+')
+        def replace_hangul(match):
+            hangul_text = match.group(0).strip()
+            if hangul_text:
+                return f'\\textkorean{{{hangul_text}}}'
+            return match.group(0)
+        result = hangul_pattern.sub(replace_hangul, result)
+    
+    return result
+
+def contains_non_latin_script(text):
+    """Check if text contains any non-Latin scripts"""
+    scripts = detect_script(text)
+    return len(scripts) > 0
+
 def unicode_to_latex(text):
-    """Converts Unicode characters for LaTeX compatibility"""
+    """Converts Unicode characters for LaTeX compatibility with multilingual support"""
     if pd.isna(text) or text == '':
         return ''
     
     result = str(text)
     
-    # Remove problematic Unicode characters FIRST
+    # Remove only truly problematic Unicode characters
+    # IMPORTANT: Preserve text shaping characters for various scripts
     invisible_chars = {
-        '\u200b': '',  # Zero-width space (U+200B)
-        '\u200c': '',  # Zero-width non-joiner (U+200C) 
-        '\u200d': '',  # Zero-width joiner (U+200D)
+        '\u200b': '',  # Zero-width space (U+200B) - safe to remove
+        # '\u200c': '',  # Zero-width non-joiner (U+200C) - KEEP for Arabic and other scripts
+        # '\u200d': '',  # Zero-width joiner (U+200D) - KEEP for Arabic and other scripts  
         '\u2060': '',  # Word joiner (U+2060)
         '\ufeff': '',  # Byte order mark (U+FEFF)
         '\u00ad': '',  # Soft hyphen (U+00AD)
@@ -39,7 +179,7 @@ def unicode_to_latex(text):
     for char, replacement in invisible_chars.items():
         result = result.replace(char, replacement)
     
-    # Basic replacements for LaTeX
+    # Basic replacements for LaTeX BEFORE multilingual processing
     # IMPORTANT: Pay attention to order - backslash FIRST!
     replacements = {
         '\\': '\\textbackslash{}',  # Handle backslash FIRST
@@ -59,6 +199,10 @@ def unicode_to_latex(text):
     for char, replacement in replacements.items():
         result = result.replace(char, replacement)
     
+    # Handle multilingual text with proper XeLaTeX commands
+    if contains_non_latin_script(result):
+        result = wrap_multilingual_text(result)
+    
     return result
 
 def musical_key_to_latex(key):
@@ -69,11 +213,12 @@ def musical_key_to_latex(key):
     # Convert to string
     result = str(key).strip()
     
-    # Remove problematic Unicode characters FIRST
+    # Remove only truly problematic Unicode characters
+    # IMPORTANT: Do NOT remove Arabic text shaping characters (U+200C, U+200D)
     invisible_chars = {
-        '\u200b': '',  # Zero-width space (U+200B)
-        '\u200c': '',  # Zero-width non-joiner (U+200C) 
-        '\u200d': '',  # Zero-width joiner (U+200D)
+        '\u200b': '',  # Zero-width space (U+200B) - safe to remove
+        # '\u200c': '',  # Zero-width non-joiner (U+200C) - KEEP for Arabic
+        # '\u200d': '',  # Zero-width joiner (U+200D) - KEEP for Arabic  
         '\u2060': '',  # Word joiner (U+2060)
         '\ufeff': '',  # Byte order mark (U+FEFF)
         '\u00ad': '',  # Soft hyphen (U+00AD)
@@ -269,7 +414,12 @@ def _create_label_original(release_folder, metadata, label_file):
         # Prepare release information
         artists = metadata.get('artist', [])
         if isinstance(artists, list):
-            artist_str = ', '.join(artists)
+            # Remove duplicates while preserving order
+            unique_artists = []
+            for artist in artists:
+                if artist not in unique_artists:
+                    unique_artists.append(artist)
+            artist_str = ', '.join(unique_artists)
         else:
             artist_str = str(artists)
         
@@ -284,27 +434,27 @@ def _create_label_original(release_folder, metadata, label_file):
         year = str(metadata.get('year', ''))
         release_id = str(metadata.get('id', ''))
         
-        # IMPROVED: Separated title/artist with resizebox, table, and footer - with fixed height
-        latex_content = f"""\\begin{{minipage}}[t]{{3.5in}}{{2in}}
-% Title/Artist section with resizebox for dynamic sizing
-\\resizebox{{3.4in}}{{!}}{{%
-\\begin{{minipage}}{{3.4in}}
-\\textbf{{{unicode_to_latex(artist_str)}}}\\\\[0.1em]
-{unicode_to_latex(title)}
-\\end{{minipage}}%
-}}
+        # Minipage method with proper adjustbox structure
+        latex_content = f"""\\begin{{minipage}}[t][4.5cm][t]{{9.5cm}}
 
-\\vspace{{0.4em}}
+    \\begin{{adjustbox}}{{max width=8cm}}
+      \\textbf{{{unicode_to_latex(artist_str)}}} 
+    \\end{{adjustbox}} \\\\
+    
+    \\begin{{adjustbox}}{{max width=8cm}}
+      {unicode_to_latex(title)}
+    \\end{{adjustbox}}    
 
-% Track table section
-\\scriptsize
-{latex_table}
+    \\vspace{{0.5cm}}
 
-\\vfill
+    \\vfill
+    \\centering
+    \\scriptsize
+    {latex_table}
+    \\vfill
 
-% Footer section (forced to bottom)
-\\raggedright
-\\tiny{{\\textbf{{{unicode_to_latex(label_str)}}}, {year}, Release ID: {release_id}}}
+    \\raggedright
+    \\tiny{{\\textbf{{{unicode_to_latex(label_str)}}}, {year}, Release ID: {release_id}}}
 \\end{{minipage}}"""
         
         # latex_content = f"""\\begin{{fitbox}}{{9.5cm}}{{4.5cm}}
@@ -502,7 +652,7 @@ def combine_latex_labels(library_path, output_dir, max_labels=None, specific_rel
     try:
         with open(output_file, 'w', encoding='utf-8') as f:
             # Read LaTeX template preamble
-            template_path = os.path.join(os.path.dirname(__file__), 'templates', 'latexTemplate.tex')
+            template_path = os.path.join(os.path.dirname(__file__), 'templates', 'xelatexTemplate.tex')
             with open(template_path, 'r', encoding='utf-8') as template:
                 f.write(template.read())
             
@@ -586,17 +736,17 @@ def combine_latex_labels(library_path, output_dir, max_labels=None, specific_rel
         return False
 
 def _compile_pdf(tex_file, output_dir):
-    """Compiles LaTeX to PDF if pdflatex is available"""
+    """Compiles LaTeX to PDF using XeLaTeX for Unicode support"""
     import subprocess
     import shutil
     
-    pdflatex_path = shutil.which("pdflatex")
-    if not pdflatex_path:
-        logger.info("pdflatex not found - LaTeX file created but not compiled")
+    xelatex_path = shutil.which("xelatex")
+    if not xelatex_path:
+        logger.info("xelatex not found - LaTeX file created but not compiled")
         return False
     
     try:
-        logger.process("Compiling LaTeX to PDF...")
+        logger.process("Compiling LaTeX to PDF with XeLaTeX...")
         
         # Change to output directory for relative paths
         original_cwd = os.getcwd()
@@ -608,14 +758,14 @@ def _compile_pdf(tex_file, output_dir):
         # Compile PDF (2x for references)
         for run in range(2):
             result = subprocess.run([
-                'pdflatex', 
+                'xelatex', 
                 '-interaction=nonstopmode',
                 '-halt-on-error',
                 f'{tex_basename}.tex'
             ], capture_output=True, text=True)
             
             if result.returncode != 0:
-                logger.error(f"pdflatex error: {result.stderr}")
+                logger.error(f"xelatex error: {result.stderr}")
                 return False
         
         # Cleanup: delete .aux, .log files
