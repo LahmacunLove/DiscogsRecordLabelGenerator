@@ -30,7 +30,7 @@ python3 main.py --dev  # Process first 10 releases
 
 ### External Tools (must be in $PATH)
 - `ffmpeg` - Audio processing
-- `pdfLaTeX` - PDF generation  
+- `xelatex` - PDF generation (XeLaTeX for Unicode support)
 - `gnuplot` - Waveform generation (optional but recommended)
 
 ### Python Libraries
@@ -50,7 +50,7 @@ pip install discogs_client yt-dlp essentia pandas rapidfuzz scipy matplotlib tqd
 **Windows:**
 1. Install [Python 3.8+](https://python.org/downloads)
 2. Install [FFmpeg](https://ffmpeg.org/download.html) and add to PATH
-3. Install [MiKTeX](https://miktex.org/) or [TeX Live](https://tug.org/texlive/) for LaTeX
+3. Install [MiKTeX](https://miktex.org/) or [TeX Live](https://tug.org/texlive/) for XeLaTeX
 4. Install [gnuplot](http://www.gnuplot.info/) (optional)
 
 **macOS:**
@@ -61,17 +61,17 @@ brew install ffmpeg mactex gnuplot
 **Ubuntu/Debian:**
 ```bash
 sudo apt update
-sudo apt install ffmpeg texlive-latex-extra gnuplot python3-pip
+sudo apt install ffmpeg texlive-xetex gnuplot python3-pip
 ```
 
 **Arch Linux:**
 ```bash
-sudo pacman -S ffmpeg texlive-most gnuplot python-pip
+sudo pacman -S ffmpeg texlive-core texlive-bin gnuplot python-pip
 ```
 
 **CentOS/RHEL/Fedora:**
 ```bash
-sudo dnf install ffmpeg texlive-latex gnuplot python3-pip
+sudo dnf install ffmpeg texlive-xetex gnuplot python3-pip
 ```
 
 ### 3. Get Discogs API Token
@@ -197,7 +197,7 @@ The generated labels include:
 **Common Issues:**
 - **"No module named 'essentia'"**: `pip install essentia`
 - **"ffmpeg not found"**: Install ffmpeg and ensure it's in your PATH
-- **"pdflatex not found"**: Install a LaTeX distribution (texlive/miktex)
+- **"xelatex not found"**: Install a LaTeX distribution with XeLaTeX support (texlive/miktex)
 - **LaTeX compilation errors**: Check for special characters in track titles
 - **GUI won't start**: Ensure tkinter is installed (`sudo apt install python3-tk` on Ubuntu)
 - **Permission errors**: Make sure the library path is writable
