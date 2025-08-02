@@ -186,6 +186,12 @@ The generated labels include:
 - Release information (artist, title, label, year)
 - Format optimized for 8163 shipping labels
 
+### Preview
+
+![Label Sample 1](sample.jpg)
+
+![Label Sample 2](sample2.jpg)
+
 ## Troubleshooting
 
 **Common Issues:**
