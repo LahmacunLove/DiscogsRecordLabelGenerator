@@ -574,6 +574,7 @@ class DiscogsLibraryMirror:
                 "genres": collectionElement.genres,
                 "formats": collectionElement.formats[0] if collectionElement.formats else {},
                 "year": collectionElement.year,
+                "release_id": release_id,
                 "id": collectionElement.id,
                 "timestamp": timestamp,
                 "videos": [video.url for video in collectionElement.videos] if hasattr(collectionElement, 'videos') else []
@@ -583,8 +584,10 @@ class DiscogsLibraryMirror:
             tracklist = []
             for track in collectionElement.tracklist:
                 track_artists = ', '.join([r.name for r in track.artists]) if hasattr(track, 'artists') else ''
+                # Clean track position by removing leading/trailing whitespace
+                clean_position = track.position.strip() if track.position else ''
                 tracklist.append({
-                    "position": track.position,
+                    "position": clean_position,
                     "title": track.title,
                     "artist": track_artists,
                     "duration": track.duration
@@ -647,43 +650,55 @@ class DiscogsLibraryMirror:
         try:
             logger.debug(f"Regenerating label for release ID: {release_id}")
             
-            # Find release folder
-            release_folder = None
+            # Find all matching release folders
+            matching_folders = []
             for item in self.library_path.iterdir():
                 if item.is_dir() and item.name.startswith(f"{release_id}_"):
-                    release_folder = item
-                    logger.debug(f"Found release folder: {release_folder.name}")
-                    break
-            else:
+                    matching_folders.append(item)
+                    
+            if not matching_folders:
                 logger.error(f"Release folder not found for ID: {release_id} in {self.library_path}")
                 return False
             
-            # Load existing metadata
-            metadata_file = release_folder / 'metadata.json'
-            if not metadata_file.exists():
-                logger.error(f"No metadata.json found for release {release_id} at {metadata_file}")
-                return False
+            # Handle multiple folders - process ALL matching folders
+            if len(matching_folders) > 1:
+                folder_names = [f.name for f in matching_folders]
+                logger.warning(f"Multiple directories found for ID {release_id}: {folder_names}")
+                logger.info(f"Processing labels for all {len(matching_folders)} folders")
             
-            logger.debug(f"Loading metadata from: {metadata_file}")
-            with open(metadata_file, 'r', encoding='utf-8') as f:
-                metadata = json.load(f)
-            
-            # Create new LaTeX label (overwrites existing)
-            logger.debug(f"Creating LaTeX label for: {metadata.get('title', 'Unknown')}")
-            result = create_latex_label_file(str(release_folder), metadata)
-            
-            if result:
-                logger.debug(f"✓ Successfully regenerated LaTeX label for release {release_id}")
-                # Check if file was really created
-                label_file = release_folder / 'label.tex'
-                if label_file.exists():
-                    logger.debug(f"✓ label.tex file exists at: {label_file}")
+            all_success = True
+            for release_folder in matching_folders:
+                logger.debug(f"Processing folder: {release_folder.name}")
+                
+                # Load existing metadata
+                metadata_file = release_folder / 'metadata.json'
+                if not metadata_file.exists():
+                    logger.error(f"No metadata.json found for release {release_id} at {metadata_file}")
+                    all_success = False
+                    continue
+                
+                logger.debug(f"Loading metadata from: {metadata_file}")
+                with open(metadata_file, 'r', encoding='utf-8') as f:
+                    metadata = json.load(f)
+                
+                # Create new LaTeX label (overwrites existing)
+                logger.debug(f"Creating LaTeX label for: {metadata.get('title', 'Unknown')}")
+                result = create_latex_label_file(str(release_folder), metadata)
+                
+                if result:
+                    logger.debug(f"✓ Successfully regenerated LaTeX label for release {release_id} in {release_folder.name}")
+                    # Check if file was really created
+                    label_file = release_folder / 'label.tex'
+                    if label_file.exists():
+                        logger.debug(f"✓ label.tex file exists at: {label_file}")
+                    else:
+                        logger.warning(f"✗ label.tex file NOT found at: {label_file}")
+                        all_success = False
                 else:
-                    logger.warning(f"✗ label.tex file NOT found at: {label_file}")
-                return True
-            else:
-                logger.warning(f"✗ create_latex_label_file returned False for {release_id}")
-                return False
+                    logger.warning(f"✗ create_latex_label_file returned False for {release_id} in {release_folder.name}")
+                    all_success = False
+            
+            return all_success
             
         except Exception as e:
             logger.error(f"Error regenerating LaTeX label for {release_id}: {e}")
@@ -695,18 +710,23 @@ class DiscogsLibraryMirror:
 
         # analyze track
     
-    def regenerate_existing_files(self, regenerate_labels=False, regenerate_waveforms=False):
-        """Regenerates LaTeX labels and/or waveforms for all existing releases"""
+    def regenerate_existing_files(self, regenerate_labels=False, regenerate_waveforms=False, max_releases=None):
+        """Regenerates LaTeX labels and/or waveforms for existing releases"""
         local_ids = set(self.get_local_release_ids())
         
         if not local_ids:
             logger.warning("No local releases found for regeneration")
             return
         
-        logger.info(f"Found {len(local_ids)} local releases for regeneration")
-        
         # Sort for consistent order
         releases_to_process = sorted(list(local_ids))
+        
+        # Apply max_releases limit if specified
+        if max_releases is not None:
+            releases_to_process = releases_to_process[:max_releases]
+            logger.info(f"Found {len(local_ids)} local releases, processing first {len(releases_to_process)} due to --max limit")
+        else:
+            logger.info(f"Found {len(local_ids)} local releases for regeneration")
         
         # Progress bar for regeneration
         desc = []
@@ -950,6 +970,12 @@ class DiscogsLibraryMirror:
         
     def save_cover_art(self, release_id, metadata):
         """Downloads all available cover images for a release"""
+        
+        # Check if primary cover already exists - if so, skip API call entirely
+        primary_cover_path = os.path.join(self.release_folder, "cover.jpg")
+        if os.path.isfile(primary_cover_path):
+            logger.debug(f"Primary cover already exists for release {release_id}, skipping Discogs API call")
+            return
         
         try:
             release = self.discogs.release(release_id)

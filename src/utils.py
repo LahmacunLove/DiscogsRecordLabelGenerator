@@ -39,10 +39,11 @@ def sanitize_filename(filename):
                 platform='auto'       # Auto-detect platform restrictions
             )
             
-            # Additional cleanup for LaTeX compatibility
-            # pathvalidate handles filesystem safety, but we need LaTeX safety too
+            # Additional cleanup for LaTeX compatibility and consistency
+            # pathvalidate handles filesystem safety, but we need LaTeX safety and consistency too
             # These characters cause issues in LaTeX file paths even when properly escaped
-            latex_problematic = ['#', '%', '&', '$', '^', '{', '}', '~', '°']
+            # Also include colon for consistency (pathvalidate allows it on Linux but we want it replaced)
+            latex_problematic = ['#', '%', '&', '$', '^', '{', '}', '~', '°', ':']
             for char in latex_problematic:
                 if char in sanitized:
                     sanitized = sanitized.replace(char, '_')

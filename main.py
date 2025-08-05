@@ -156,16 +156,33 @@ def main():
             generate_final_labels(library_mirror, specific_release_id=args.release_id)
             
     elif args.regenerate_labels or args.regenerate_waveforms:
+        # Determine limit for regeneration
+        limit = None
+        if args.max:
+            limit = args.max
+        elif args.dev:
+            limit = 10
+            
         if args.regenerate_labels and args.regenerate_waveforms:
-            logger.separator("Regenerating all LaTeX labels and waveforms")
+            if limit:
+                logger.separator(f"Regenerating LaTeX labels and waveforms (Limited to {limit} releases)")
+            else:
+                logger.separator("Regenerating all LaTeX labels and waveforms")
         elif args.regenerate_labels:
-            logger.separator("Regenerating all LaTeX labels")
+            if limit:
+                logger.separator(f"Regenerating LaTeX labels (Limited to {limit} releases)")
+            else:
+                logger.separator("Regenerating all LaTeX labels")
         elif args.regenerate_waveforms:
-            logger.separator("Regenerating all waveforms")
+            if limit:
+                logger.separator(f"Regenerating waveforms (Limited to {limit} releases)")
+            else:
+                logger.separator("Regenerating all waveforms")
         
         library_mirror.regenerate_existing_files(
             regenerate_labels=args.regenerate_labels,
-            regenerate_waveforms=args.regenerate_waveforms
+            regenerate_waveforms=args.regenerate_waveforms,
+            max_releases=limit
         )
     elif args.dryrun:
         logger.separator("Dry Run Mode - Processing existing releases offline")
