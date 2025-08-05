@@ -48,9 +48,21 @@ def sanitize_filename(filename):
                 if char in sanitized:
                     sanitized = sanitized.replace(char, '_')
             
+            # Handle different types of apostrophes and quotes
+            apostrophe_variants = [
+                "'",  # U+2019 - Right single quotation mark (curly apostrophe)
+                "'",  # U+2018 - Left single quotation mark  
+                "ʼ",  # U+02BC - Modifier letter apostrophe
+                "'",  # U+0027 - Standard ASCII apostrophe (already handled by pathvalidate)
+            ]
+            for char in apostrophe_variants:
+                if char in sanitized:
+                    sanitized = sanitized.replace(char, '_')
+            
             # Clean up multiple underscores
             sanitized = re.sub(r'_+', '_', sanitized)
-            sanitized = sanitized.strip('_.')
+            # Remove trailing spaces and dots (Windows compatibility) but keep internal spaces
+            sanitized = sanitized.rstrip(' .')
             
             return sanitized if sanitized else "unnamed"
             
@@ -74,14 +86,17 @@ def sanitize_filename(filename):
     for char in invisible_chars:
         sanitized = sanitized.replace(char, '')
     
-    # Replace problematic characters with underscores
-    sanitized = re.sub(r'[\\/:*?"<>|\'"#%&$^{}~°†‡§¶]', '_', sanitized)
+    # Replace problematic characters with underscores (but keep spaces)
+    # Include Unicode apostrophe variants in the pattern
+    sanitized = re.sub(r'[\\/:*?"<>|\'"''ʼ#%&$^{}~°†‡§¶]', '_', sanitized)
     
     # Replace multiple consecutive underscores with single underscore
     sanitized = re.sub(r'_+', '_', sanitized)
     
-    # Remove leading/trailing whitespace and dots (Windows compatibility)
-    sanitized = sanitized.strip(' .')
+    # Remove trailing spaces and dots (Windows compatibility) but keep internal spaces
+    sanitized = sanitized.rstrip(' .')
+    # Remove leading underscores
+    sanitized = sanitized.lstrip('_')
     
     # Ensure we don't have an empty string
     if not sanitized:

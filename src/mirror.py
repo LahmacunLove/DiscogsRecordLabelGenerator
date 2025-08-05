@@ -261,6 +261,26 @@ class DiscogsLibraryMirror:
         name = re.sub(r'\s+', '_', name)  # Optional: replace spaces
         return name.strip(replace_with)
 
+    def get_all_local_release_ids(self):
+        """Get ALL release IDs that have at least metadata.json (for label regeneration)."""
+        if not self.library_path.exists():
+            return []
+        local_ids = []
+        for entry in self.library_path.iterdir():
+            if entry.is_dir() and "_" in entry.name:
+                try:
+                    release_id = int(entry.name.split("_")[0])
+                    
+                    # Only check for metadata.json existence
+                    metadata_file = entry / "metadata.json"
+                    if metadata_file.exists():
+                        local_ids.append(release_id)
+                    else:
+                        logger.debug(f"Release {entry.name} has no metadata.json - skipping")
+                except ValueError:
+                    pass
+        return local_ids
+
     def get_local_release_ids(self):
         """Get release IDs that are completely processed through all pipeline steps."""
         if not self.library_path.exists():
@@ -712,7 +732,13 @@ class DiscogsLibraryMirror:
     
     def regenerate_existing_files(self, regenerate_labels=False, regenerate_waveforms=False, max_releases=None):
         """Regenerates LaTeX labels and/or waveforms for existing releases"""
-        local_ids = set(self.get_local_release_ids())
+        
+        # For label regeneration, use all releases with metadata.json (not just complete ones)
+        if regenerate_labels and not regenerate_waveforms:
+            local_ids = set(self.get_all_local_release_ids())
+        else:
+            # For waveforms or combined regeneration, use only complete releases
+            local_ids = set(self.get_local_release_ids())
         
         if not local_ids:
             logger.warning("No local releases found for regeneration")
