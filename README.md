@@ -88,6 +88,11 @@ sudo dnf install ffmpeg texlive-xetex gnuplot python3-pip
 
 ### 4. Configuration
 
+The application requires two configuration values:
+
+- **`DISCOGS_USER_TOKEN`**: Your personal Discogs API token (get it from step 3 above)
+- **`LIBRARY_PATH`**: Local filesystem path where the program will store all downloaded metadata, audio files, analysis data, and generated labels. Each release will have its own subdirectory here.
+
 **Option A: GUI Configuration (Easy)**
 ```bash
 python3 gui.py
