@@ -32,6 +32,23 @@ echo "✅ Virtual environment activated: $VIRTUAL_ENV"
 echo "🖥️  Starting GUI..."
 echo ""
 
+# Check if tkinter is available
+python3 -c "import tkinter" 2>/dev/null
+if [ $? -ne 0 ]; then
+    echo "❌ Error: tkinter is not installed!"
+    echo ""
+    echo "Tkinter is required for the GUI but cannot be installed via pip."
+    echo "Please install it for your system:"
+    echo ""
+    echo "  Fedora/RHEL:    sudo dnf install python3-tkinter"
+    echo "  Ubuntu/Debian:  sudo apt install python3-tk"
+    echo "  Homebrew:       brew install python-tk@3.13"
+    echo "                  or: brew reinstall python@3.13"
+    echo ""
+    deactivate
+    exit 1
+fi
+
 # Run the GUI script
 python3 "$SCRIPT_DIR/gui.py" "$@"
 

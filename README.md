@@ -80,8 +80,14 @@ pip install discogs_client yt-dlp essentia pandas rapidfuzz scipy matplotlib tqd
 
 ### 2. Install External Dependencies
 
+**Important**: If you plan to use the GUI, you need tkinter:
+- **System Python (Fedora/RHEL)**: `sudo dnf install python3-tkinter`
+- **System Python (Ubuntu/Debian)**: `sudo apt install python3-tk`
+- **Homebrew Python (macOS/Linux)**: `brew install python-tk@3.13` or reinstall Python with `brew reinstall python@3.13`
+- **Windows**: Tkinter is usually included with Python installer
+
 **Windows:**
-1. Install [Python 3.8+](https://python.org/downloads)
+1. Install [Python 3.8+](https://python.org/downloads) - make sure to check "tcl/tk and IDLE" during installation
 2. Install [FFmpeg](https://ffmpeg.org/download.html) and add to PATH
 3. Install [MiKTeX](https://miktex.org/) or [TeX Live](https://tug.org/texlive/) for XeLaTeX
 4. Install [gnuplot](http://www.gnuplot.info/) (optional)
@@ -248,18 +254,23 @@ The generated labels include:
 
 **Common Issues:**
 - **"No module named 'essentia'" or similar**: Activate virtual environment (`source venv/bin/activate`) or run `pip install -r requirements.txt`
-- **"No module named 'six'"**: This is a dependency issue; reinstall discogs_client or use virtual environment
+- **"No module named 'six'"**: Use the convenience scripts (`./run.sh` or `./run-gui.sh`) or manually activate venv first
+- **"No module named '_tkinter'" (GUI)**: Install tkinter for your Python installation:
+  - Fedora/RHEL: `sudo dnf install python3-tkinter`
+  - Ubuntu/Debian: `sudo apt install python3-tk`
+  - Homebrew Python: `brew install python-tk@3.13` or `brew reinstall python@3.13`
+  - Note: Tkinter cannot be installed via pip, it's a system package
 - **"ffmpeg not found"**: Install ffmpeg and ensure it's in your PATH
 - **"xelatex not found"**: Install a LaTeX distribution with XeLaTeX support (texlive/miktex)
 - **LaTeX compilation errors**: Check for special characters in track titles
-- **GUI won't start**: Ensure tkinter is installed (`sudo apt install python3-tk` on Ubuntu)
 - **Permission errors**: Make sure the library path is writable
 - **PEP 668 errors (Python 3.13+)**: Use a virtual environment instead of system-wide installation
 
 **Platform-Specific:**
 - **Windows**: Use forward slashes `/` in paths, not backslashes `\`
 - **macOS**: May need to install Xcode command line tools: `xcode-select --install`
-- **Linux**: Some distributions require separate python3-tkinter package
+- **Homebrew Python users**: If GUI doesn't work, you may need to reinstall Python with tkinter support: `brew reinstall python@3.13`
+- **Linux**: System Python usually requires separate python3-tkinter/python3-tk package for GUI support
 
 ## License
 
