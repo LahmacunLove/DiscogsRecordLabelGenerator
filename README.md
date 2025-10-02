@@ -137,7 +137,7 @@ pip install -r requirements.txt
 
 **Alternative: Direct installation**
 ```bash
-pip install discogs_client yt-dlp essentia pandas rapidfuzz scipy matplotlib tqdm segno numpy scikit-learn librosa python-dateutil
+pip install python3-discogs-client yt-dlp essentia pandas rapidfuzz scipy matplotlib tqdm segno numpy scikit-learn librosa python-dateutil
 ```
 
 ## Setup
@@ -349,7 +349,6 @@ The generated labels include:
 
 **Common Issues:**
 - **"No module named 'essentia'" or similar**: Activate virtual environment (`source venv/bin/activate`) or run `pip install -r requirements.txt`
-- **"No module named 'six'"**: Use the convenience script (`./run.sh`) or manually activate venv first
 - **"ffmpeg not found"**: Install ffmpeg and ensure it's in your PATH
 - **"xelatex not found"**: Install a LaTeX distribution with XeLaTeX support (texlive/miktex)
 - **LaTeX compilation errors**: Check for special characters in track titles
