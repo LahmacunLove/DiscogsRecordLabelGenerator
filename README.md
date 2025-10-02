@@ -19,7 +19,89 @@ A Python application that syncs your Discogs collection, analyzes tracks, and ge
 
 ## Quick Start
 
-### Option 1: GUI (Recommended for beginners)
+### Step 1: Setup (First Time Only)
+```bash
+python3 setup.py
+```
+This interactive script will guide you through:
+- Getting your Discogs API token
+- Choosing where to store your music library
+- Creating your configuration file
+
+<details>
+<summary>Example setup session (click to expand)</summary>
+
+```
+============================================================
+  DiscogsRecordLabelGenerator - Setup
+============================================================
+
+── Discogs API Token ───────────────────────────────────────
+
+You need a personal access token from Discogs.
+
+To get your token:
+  1. Go to: https://www.discogs.com/settings/developers
+  2. Click 'Generate new token'
+  3. Copy the token
+
+Enter your Discogs token: njBUrxYhPyKiBWZctlFhYXXmHFNjhybHXBByTyPS
+
+── Library Path ────────────────────────────────────────────
+
+This is where the application will store:
+  • Downloaded metadata
+  • Audio files
+  • Analysis data
+  • Generated labels
+
+Each release will have its own subdirectory.
+
+Suggested path: /home/user/Music/DiscogsLibrary
+
+Enter library path [/home/user/Music/DiscogsLibrary]: 
+
+📁 Directory does not exist: /home/user/Music/DiscogsLibrary
+Create it now? [Y/n]: y
+✅ Created directory: /home/user/Music/DiscogsLibrary
+
+── Creating Configuration ──────────────────────────────────
+
+✅ Config directory ready: /home/user/.config/discogsDBLabelGen
+✅ Configuration saved: /home/user/.config/discogsDBLabelGen/discogs.env
+
+── Testing Configuration ───────────────────────────────────
+
+✅ Configuration loaded successfully!
+   Library path: /home/user/Music/DiscogsLibrary
+   Token: ********************yTyPS
+
+── Next Steps ──────────────────────────────────────────────
+
+Configuration complete! Here's what to do next:
+
+1. Install dependencies (if not done yet):
+   python3 -m venv venv
+   source venv/bin/activate
+   pip install -r requirements.txt
+
+2. Run the application:
+   ./run.sh --dev          # Test with first 10 releases
+   ./run.sh                # Full collection sync
+   ./run-gui.sh            # Launch GUI
+
+3. For help:
+   ./run.sh --help
+
+============================================================
+  Setup completed successfully! 🎉
+============================================================
+```
+</details>
+
+### Step 2: Run the Application
+
+**Option A: GUI (Recommended for beginners)**
 ```bash
 ./run-gui.sh  # Automatically uses virtual environment
 ```
@@ -27,7 +109,7 @@ Use the graphical interface to configure your Discogs token and library path, th
 
 ![GUI Screenshot](screenshot_gui.png)
 
-### Option 2: Command Line
+**Option B: Command Line**
 ```bash
 ./run.sh --dev  # Process first 10 releases (automatically uses virtual environment)
 ```
@@ -57,9 +139,9 @@ pip install discogs_client yt-dlp essentia pandas rapidfuzz scipy matplotlib tqd
 
 ## Setup
 
-### 1. Install Python Dependencies
+### Step 1: Install Python Dependencies
 
-**Option A: Using requirements.txt (Recommended)**
+**Recommended: Using requirements.txt**
 ```bash
 # Create and activate virtual environment
 python3 -m venv venv
@@ -69,16 +151,11 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-After setup, you can use the convenience scripts (`./run.sh` or `./run-gui.sh`) which automatically handle the virtual environment for you.
-
-**Option B: Manual installation**
-```bash
-pip install discogs_client yt-dlp essentia pandas rapidfuzz scipy matplotlib tqdm segno numpy scikit-learn librosa python-dateutil
-```
+> **Note**: The convenience scripts (`./run.sh` and `./run-gui.sh`) automatically handle the virtual environment for you after this initial setup.
 
 > **Note for Python 3.13+**: Due to PEP 668, using a virtual environment is strongly recommended to avoid conflicts with system packages.
 
-### 2. Install External Dependencies
+### Step 2: Install External Dependencies
 
 **Important**: If you plan to use the GUI, you need tkinter:
 - **System Python (Fedora/RHEL)**: `sudo dnf install python3-tkinter`
@@ -113,26 +190,33 @@ sudo pacman -S ffmpeg texlive-core texlive-bin gnuplot python-pip
 sudo dnf install ffmpeg texlive-xetex gnuplot python3-pip
 ```
 
-### 3. Get Discogs API Token
-
-1. Go to https://www.discogs.com/settings/developers
-2. Generate a personal access token
-3. Use the GUI (`python3 gui.py`) to configure it, or manually create the config file
-
-### 4. Configuration
+### Step 3: Configure the Application
 
 The application requires two configuration values:
 
-- **`DISCOGS_USER_TOKEN`**: Your personal Discogs API token (get it from step 3 above)
+- **`DISCOGS_USER_TOKEN`**: Your personal Discogs API token from https://www.discogs.com/settings/developers
 - **`LIBRARY_PATH`**: Local filesystem path where the program will store all downloaded metadata, audio files, analysis data, and generated labels. Each release will have its own subdirectory here.
 
-**Option A: GUI Configuration (Easy)**
+**Option A: Interactive Setup (Easiest)** ⭐
 ```bash
-python3 gui.py
+python3 setup.py
+```
+This interactive script will:
+- Guide you step-by-step to get your Discogs API token
+- Help you choose a library path
+- Create the directory if it doesn't exist
+- Automatically create the configuration file
+- Test that everything works
+
+See the expandable example above for what the setup process looks like.
+
+**Option B: GUI Configuration**
+```bash
+./run-gui.sh  # or: source venv/bin/activate && python3 gui.py
 ```
 Enter your token and select library folder in the interface.
 
-**Option B: Manual Configuration**
+**Option C: Manual Configuration**
 Run this command to create and edit the config file:
 ```bash
 mkdir -p ~/.config/discogsDBLabelGen && cat > ~/.config/discogsDBLabelGen/discogs.env << 'EOF'
