@@ -41,14 +41,14 @@ python3 main.py --dev  # Process first 10 releases
 
 ### Python Libraries
 ```bash
-pip install discogs_client yt-dlp essentia pandas rapidfuzz scipy matplotlib tqdm segno
+pip install discogs_client yt-dlp essentia pandas rapidfuzz scipy matplotlib tqdm segno numpy scikit-learn librosa python-dateutil
 ```
 
 ## Setup
 
 ### 1. Install Python Dependencies
 ```bash
-pip install discogs_client yt-dlp essentia pandas rapidfuzz scipy matplotlib tqdm segno
+pip install discogs_client yt-dlp essentia pandas rapidfuzz scipy matplotlib tqdm segno numpy scikit-learn librosa python-dateutil
 ```
 
 ### 2. Install External Dependencies
