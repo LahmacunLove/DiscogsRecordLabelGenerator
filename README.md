@@ -21,7 +21,7 @@ A Python application that syncs your Discogs collection, analyzes tracks, and ge
 
 ### Option 1: GUI (Recommended for beginners)
 ```bash
-python3 gui.py
+./run-gui.sh  # Automatically uses virtual environment
 ```
 Use the graphical interface to configure your Discogs token and library path, then start processing with a click!
 
@@ -29,8 +29,10 @@ Use the graphical interface to configure your Discogs token and library path, th
 
 ### Option 2: Command Line
 ```bash
-python3 main.py --dev  # Process first 10 releases
+./run.sh --dev  # Process first 10 releases (automatically uses virtual environment)
 ```
+
+> **Note**: The `run.sh` and `run-gui.sh` convenience scripts automatically activate the virtual environment for you. If you prefer to manually activate it, use: `source venv/bin/activate`
 
 ## Requirements
 
@@ -66,6 +68,8 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 # Install all dependencies
 pip install -r requirements.txt
 ```
+
+After setup, you can use the convenience scripts (`./run.sh` or `./run-gui.sh`) which automatically handle the virtual environment for you.
 
 **Option B: Manual installation**
 ```bash
@@ -138,9 +142,11 @@ Replace `your_discogs_token_here` and `/path/to/your/music/library` with your ac
 
 ### GUI Mode (Recommended)
 ```bash
-# If using virtual environment, activate it first:
-# source venv/bin/activate
+# Easy way (convenience script):
+./run-gui.sh
 
+# Or activate venv manually:
+source venv/bin/activate
 python3 gui.py
 ```
 The GUI provides:
@@ -151,39 +157,45 @@ The GUI provides:
 - Label generation from existing releases
 
 ### Command Line Mode
-```bash
-# If using virtual environment, activate it first:
-# source venv/bin/activate
 
+**Using convenience script (recommended):**
+```bash
 # Full collection sync
-python3 main.py
+./run.sh
 
 # Development mode (first 10 releases only)
-python3 main.py --dev
+./run.sh --dev
 
 # Dry run (offline processing of existing releases)
-python3 main.py --dryrun
+./run.sh --dryrun
 
 # Download-only mode (sync and download without analysis)
-python3 main.py --download-only
-
-# Download-only with development mode
-python3 main.py --download-only --dev
+./run.sh --download-only
 
 # Custom limit (e.g., first 25 releases)  
-python3 main.py --max 25
+./run.sh --max 25
 
 # Regenerate labels only
-python3 main.py --regenerate-labels
+./run.sh --regenerate-labels
+```
 
-# Regenerate waveforms only
-python3 main.py --regenerate-waveforms
+**Or activate venv manually:**
+```bash
+source venv/bin/activate
+
+python3 main.py                      # Full collection sync
+python3 main.py --dev                # Development mode
+python3 main.py --dryrun             # Dry run
+python3 main.py --download-only      # Download-only mode
+python3 main.py --max 25             # Custom limit
+python3 main.py --regenerate-labels  # Regenerate labels only
+python3 main.py --regenerate-waveforms  # Regenerate waveforms only
 ```
 
 ### Generate Printable Labels
 ```bash
-# If using virtual environment, activate it first:
-# source venv/bin/activate
+# With virtual environment (activate first):
+source venv/bin/activate
 
 # Generate labels for all releases
 python3 generate_labels.py
