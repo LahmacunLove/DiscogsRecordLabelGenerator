@@ -198,7 +198,7 @@ def print_next_steps():
     print("2. Run the application:")
     print("   ./run.sh --dev          # Test with first 10 releases")
     print("   ./run.sh                # Full collection sync")
-    print("   ./run-gui.sh            # Launch GUI")
+    print("   python3 sync.py --help  # See all CLI options")
     print()
     print("3. For help:")
     print("   ./run.sh --help")

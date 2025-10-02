@@ -26,8 +26,8 @@ This command processes existing releases offline without making API calls or dow
 ### 2. Verify All Entry Points
 If you modified core functionality, test all main entry points:
 ```bash
-# Test GUI (if applicable)
-python3 gui.py
+# Test sync tool
+python3 sync.py --dryrun
 
 # Test label generation
 python3 generate_labels.py --max 1
@@ -71,7 +71,7 @@ If you added new imports:
 ### Modifying Configuration
 1. Update `src/config.py` if needed
 2. Update configuration examples in README.md
-3. Test with both GUI and manual configuration methods
+3. Test with both sync.py and manual configuration methods
 4. Verify backward compatibility with existing config files
 
 ### Changing File Structure
@@ -105,8 +105,9 @@ python3 generate_labels.py --max 5
 # Test all modes
 python3 main.py --dryrun
 python3 main.py --dev
+python3 sync.py --dryrun
+python3 sync.py --dev --labels
 python3 generate_labels.py --max 10
-python3 gui.py  # Manual verification
 ```
 
 ## Error Handling

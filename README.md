@@ -88,10 +88,11 @@ Configuration complete! Here's what to do next:
 2. Run the application:
    ./run.sh --dev          # Test with first 10 releases
    ./run.sh                # Full collection sync
-   ./run-gui.sh            # Launch GUI
+   python3 sync.py --help  # See all CLI options
 
 3. For help:
    ./run.sh --help
+   python3 sync.py --help
 
 ============================================================
   Setup completed successfully! 🎉
@@ -101,20 +102,22 @@ Configuration complete! Here's what to do next:
 
 ### Step 2: Run the Application
 
-**Option A: GUI (Recommended for beginners)**
-```bash
-./run-gui.sh  # Automatically uses virtual environment
-```
-Use the graphical interface to configure your Discogs token and library path, then start processing with a click!
-
-![GUI Screenshot](screenshot_gui.png)
-
-**Option B: Command Line**
+**Option A: Quick Sync (Command Line)**
 ```bash
 ./run.sh --dev  # Process first 10 releases (automatically uses virtual environment)
 ```
 
-> **Note**: The `run.sh` and `run-gui.sh` convenience scripts automatically activate the virtual environment for you. If you prefer to manually activate it, use: `source venv/bin/activate`
+**Option B: Advanced Sync (CLI Tool)**
+```bash
+python3 sync.py --dev --labels  # Dev mode with label generation
+python3 sync.py --help          # See all options
+```
+
+> **Note**: The `run.sh` convenience script automatically activates the virtual environment for you. If you prefer to manually activate it, use: `source venv/bin/activate`
+</parameter>
+
+<old_text line=151>
+> **Note**: The `run.sh` convenience script automatically handles the virtual environment for you after this initial setup.
 
 ## Requirements
 
@@ -151,20 +154,14 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-> **Note**: The convenience scripts (`./run.sh` and `./run-gui.sh`) automatically handle the virtual environment for you after this initial setup.
+> **Note**: The `run.sh` convenience script automatically handles the virtual environment for you after this initial setup.
 
 > **Note for Python 3.13+**: Due to PEP 668, using a virtual environment is strongly recommended to avoid conflicts with system packages.
 
 ### Step 2: Install External Dependencies
 
-**Important**: If you plan to use the GUI, you need tkinter:
-- **System Python (Fedora/RHEL)**: `sudo dnf install python3-tkinter`
-- **System Python (Ubuntu/Debian)**: `sudo apt install python3-tk`
-- **Homebrew Python (macOS/Linux)**: `brew install python-tk@3.13` or reinstall Python with `brew reinstall python@3.13`
-- **Windows**: Tkinter is usually included with Python installer
-
 **Windows:**
-1. Install [Python 3.8+](https://python.org/downloads) - make sure to check "tcl/tk and IDLE" during installation
+1. Install [Python 3.8+](https://python.org/downloads)
 2. Install [FFmpeg](https://ffmpeg.org/download.html) and add to PATH
 3. Install [MiKTeX](https://miktex.org/) or [TeX Live](https://tug.org/texlive/) for XeLaTeX
 4. Install [gnuplot](http://www.gnuplot.info/) (optional)
@@ -210,11 +207,11 @@ This interactive script will:
 
 See the expandable example above for what the setup process looks like.
 
-**Option B: GUI Configuration**
+**Option B: CLI Sync Tool Configuration**
 ```bash
-./run-gui.sh  # or: source venv/bin/activate && python3 gui.py
+python3 sync.py --token YOUR_TOKEN --library ~/Music/Discogs --configure
 ```
-Enter your token and select library folder in the interface.
+This saves your configuration for future use.
 
 **Option C: Manual Configuration**
 Run this command to create and edit the config file:
@@ -230,23 +227,37 @@ Replace `your_discogs_token_here` and `/path/to/your/music/library` with your ac
 
 ## Usage
 
-### GUI Mode (Recommended)
+### CLI Sync Tool (sync.py)
+
+The `sync.py` tool provides a comprehensive command-line interface:
+
 ```bash
-# Easy way (convenience script):
-./run-gui.sh
+# Full sync with label generation
+python3 sync.py
 
-# Or activate venv manually:
-source venv/bin/activate
-python3 gui.py
+# Development mode (limited releases)
+python3 sync.py --dev
+
+# Dry run (process existing releases only)
+python3 sync.py --dryrun
+
+# Configure and save settings
+python3 sync.py --token YOUR_TOKEN --library ~/Music/Discogs --configure
+
+# Generate labels only (no sync)
+python3 sync.py --labels-only
+
+# Generate specific release
+python3 sync.py --labels-only --release 123456
+
+# Generate labels since date
+python3 sync.py --labels-only --since 2024-01-01
+
+# Limit number of labels
+python3 sync.py --labels-only --max-labels 10
 ```
-The GUI provides:
-- Easy configuration management
-- Processing mode selection (Full/Dev/Dry Run/Download Only/Generate Labels Only/Custom)
-- Real-time progress monitoring
-- One-click processing
-- Label generation from existing releases
 
-### Command Line Mode
+### Main Script (main.py)
 
 **Using convenience script (recommended):**
 ```bash
@@ -338,12 +349,7 @@ The generated labels include:
 
 **Common Issues:**
 - **"No module named 'essentia'" or similar**: Activate virtual environment (`source venv/bin/activate`) or run `pip install -r requirements.txt`
-- **"No module named 'six'"**: Use the convenience scripts (`./run.sh` or `./run-gui.sh`) or manually activate venv first
-- **"No module named '_tkinter'" (GUI)**: Install tkinter for your Python installation:
-  - Fedora/RHEL: `sudo dnf install python3-tkinter`
-  - Ubuntu/Debian: `sudo apt install python3-tk`
-  - Homebrew Python: `brew install python-tk@3.13` or `brew reinstall python@3.13`
-  - Note: Tkinter cannot be installed via pip, it's a system package
+- **"No module named 'six'"**: Use the convenience script (`./run.sh`) or manually activate venv first
 - **"ffmpeg not found"**: Install ffmpeg and ensure it's in your PATH
 - **"xelatex not found"**: Install a LaTeX distribution with XeLaTeX support (texlive/miktex)
 - **LaTeX compilation errors**: Check for special characters in track titles
@@ -353,8 +359,7 @@ The generated labels include:
 **Platform-Specific:**
 - **Windows**: Use forward slashes `/` in paths, not backslashes `\`
 - **macOS**: May need to install Xcode command line tools: `xcode-select --install`
-- **Homebrew Python users**: If GUI doesn't work, you may need to reinstall Python with tkinter support: `brew reinstall python@3.13`
-- **Linux**: System Python usually requires separate python3-tkinter/python3-tk package for GUI support
+
 
 ## License
 
