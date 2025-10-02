@@ -89,13 +89,16 @@ python3 gui.py
 Enter your token and select library folder in the interface.
 
 **Option B: Manual Configuration**
-Create `~/.config/discogsDBLabelGen/discogs.env`:
-```json
+Run this command to create and edit the config file:
+```bash
+mkdir -p ~/.config/discogsDBLabelGen && cat > ~/.config/discogsDBLabelGen/discogs.env << 'EOF'
 {
   "DISCOGS_USER_TOKEN": "your_discogs_token_here",
   "LIBRARY_PATH": "/path/to/your/music/library"
 }
+EOF
 ```
+Replace `your_discogs_token_here` and `/path/to/your/music/library` with your actual values.
 
 ## Usage
 
