@@ -1,4 +1,4 @@
-discogs_client
+python3-discogs-client
 yt-dlp
 essentia
 pandas
