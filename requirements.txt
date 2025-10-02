@@ -1,0 +1,13 @@
+discogs_client
+yt-dlp
+essentia
+pandas
+rapidfuzz
+scipy
+matplotlib
+tqdm
+segno
+numpy
+scikit-learn
+librosa
+python-dateutil

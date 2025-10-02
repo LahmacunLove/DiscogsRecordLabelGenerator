@@ -40,6 +40,15 @@ python3 main.py --dev  # Process first 10 releases
 - `gnuplot` - Waveform generation (optional but recommended)
 
 ### Python Libraries
+
+**Recommended: Use a virtual environment** (especially for Python 3.13+)
+```bash
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+**Alternative: Direct installation**
 ```bash
 pip install discogs_client yt-dlp essentia pandas rapidfuzz scipy matplotlib tqdm segno numpy scikit-learn librosa python-dateutil
 ```
@@ -47,9 +56,23 @@ pip install discogs_client yt-dlp essentia pandas rapidfuzz scipy matplotlib tqd
 ## Setup
 
 ### 1. Install Python Dependencies
+
+**Option A: Using requirements.txt (Recommended)**
+```bash
+# Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install all dependencies
+pip install -r requirements.txt
+```
+
+**Option B: Manual installation**
 ```bash
 pip install discogs_client yt-dlp essentia pandas rapidfuzz scipy matplotlib tqdm segno numpy scikit-learn librosa python-dateutil
 ```
+
+> **Note for Python 3.13+**: Due to PEP 668, using a virtual environment is strongly recommended to avoid conflicts with system packages.
 
 ### 2. Install External Dependencies
 
@@ -115,6 +138,9 @@ Replace `your_discogs_token_here` and `/path/to/your/music/library` with your ac
 
 ### GUI Mode (Recommended)
 ```bash
+# If using virtual environment, activate it first:
+# source venv/bin/activate
+
 python3 gui.py
 ```
 The GUI provides:
@@ -126,6 +152,9 @@ The GUI provides:
 
 ### Command Line Mode
 ```bash
+# If using virtual environment, activate it first:
+# source venv/bin/activate
+
 # Full collection sync
 python3 main.py
 
@@ -153,6 +182,9 @@ python3 main.py --regenerate-waveforms
 
 ### Generate Printable Labels
 ```bash
+# If using virtual environment, activate it first:
+# source venv/bin/activate
+
 # Generate labels for all releases
 python3 generate_labels.py
 
@@ -203,12 +235,14 @@ The generated labels include:
 ## Troubleshooting
 
 **Common Issues:**
-- **"No module named 'essentia'"**: `pip install essentia`
+- **"No module named 'essentia'" or similar**: Activate virtual environment (`source venv/bin/activate`) or run `pip install -r requirements.txt`
+- **"No module named 'six'"**: This is a dependency issue; reinstall discogs_client or use virtual environment
 - **"ffmpeg not found"**: Install ffmpeg and ensure it's in your PATH
 - **"xelatex not found"**: Install a LaTeX distribution with XeLaTeX support (texlive/miktex)
 - **LaTeX compilation errors**: Check for special characters in track titles
 - **GUI won't start**: Ensure tkinter is installed (`sudo apt install python3-tk` on Ubuntu)
 - **Permission errors**: Make sure the library path is writable
+- **PEP 668 errors (Python 3.13+)**: Use a virtual environment instead of system-wide installation
 
 **Platform-Specific:**
 - **Windows**: Use forward slashes `/` in paths, not backslashes `\`
