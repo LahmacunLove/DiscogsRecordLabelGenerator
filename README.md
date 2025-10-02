@@ -2,6 +2,12 @@
 
 A Python application that syncs your Discogs collection, analyzes tracks, and generates printable vinyl record labels.
 
+### Preview
+
+![Label Sample 1](sample.png)
+
+![Label Sample 2](sample2.png)
+
 ## What it does
 
 1. **Downloads your Discogs collection** via the Discogs API
@@ -188,12 +194,6 @@ The generated labels include:
 - Waveform visualizations
 - Release information (artist, title, label, year)
 - Format optimized for 8163 shipping labels
-
-### Preview
-
-![Label Sample 1](sample.png)
-
-![Label Sample 2](sample2.png)
 
 ## Troubleshooting
 
