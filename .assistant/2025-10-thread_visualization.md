@@ -285,3 +285,67 @@ executor_class = (
 - ✅ No performance degradation observed with ThreadPoolExecutor
 
 **Commit:** `sync/fix: Use ThreadPoolExecutor in console mode for monitor compatibility`
+
+---
+
+### UI Jumpiness from Log Messages (January 2025)
+
+**Issue:** The CLI display was very jumpy - as new log messages were printed to the console, the progress panels would shift upward, making the UI hard to read.
+
+**Root Cause:**
+- Logger was outputting messages directly to stdout while Rich's Live display was running
+- Each log message pushed the display panels up
+- Created a poor visual experience with constantly moving panels
+
+**Solution:**
+Implemented log capture within the Rich UI:
+
+1. **Added Log Buffer**: Created a `deque` buffer in `ThreadMonitor` to store the last 6 log messages
+2. **Custom Log Handler**: Created `BufferHandler` class that intercepts logger output
+3. **Temporary Suppression**: Removed console handler during Live display, restored after
+4. **Log Panel**: Added "Recent Activity" panel showing timestamped messages within the UI
+5. **Clean Integration**: Log handler installed/removed around Live context with try/finally
+
+**Implementation Details:**
+
+```python
+# Added to ThreadMonitor
+self.log_buffer = deque(maxlen=6)
+
+class BufferHandler(logging.Handler):
+    def emit(self, record):
+        msg = self.format(record)
+        if " │ " in msg:
+            msg = msg.split(" │ ", 1)[1]  # Strip level prefix
+        self.monitor.add_log_message(msg)
+
+# In mirror.py
+monitor.install_log_handler()
+with Live(...):
+    # Process releases
+finally:
+    monitor.remove_log_handler()  # Restore normal logging
+```
+
+**Display Layout:**
+- Header: Overall progress (5 lines)
+- Workers: Per-worker panels (flexible)
+- Logs: Recent activity with timestamps (10 lines)
+- Footer: Instructions (3 lines)
+
+**Testing:**
+```bash
+# Before: Jumpy display with panels constantly shifting
+# After: Stable display with logs contained in dedicated panel
+./bin/sync.sh --max 1
+./bin/sync.sh --max 2
+```
+
+**Benefits:**
+- ✅ Fixed panels - no more jumping
+- ✅ Log messages visible within UI
+- ✅ Timestamps for each message
+- ✅ Clean transition back to normal logging after completion
+- ✅ Better user experience with stable, readable display
+
+**Commit:** `sync/ui: Add log capture panel to prevent UI jumpiness`
