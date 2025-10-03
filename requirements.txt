@@ -12,3 +12,4 @@ scikit-learn
 librosa
 python-dateutil
 rich
+jinja2

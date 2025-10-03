@@ -384,7 +384,8 @@ def inplace_change(filename, old_string, new_string):
         s = f.read()
 
     if old_string not in s:
-        logger.warning(f'String "{old_string}" not found in {filename}')
+        # String not found - already correct (e.g., pandas with jinja2 generates correct output)
+        logger.debug(f'String "{old_string}" not found in {filename} (already correct)')
         return
 
     with open(filename, "w", encoding="utf-8") as f:
