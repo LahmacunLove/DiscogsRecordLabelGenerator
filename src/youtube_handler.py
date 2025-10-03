@@ -121,6 +121,16 @@ class YouTubeMatcher:
         self.total_tracks = 0
         # Extract release_id from folder name for error tracking
         self.release_id = self._extract_release_id(release_folder)
+
+        # Load YouTube cookies configuration if available
+        from config import load_config
+
+        try:
+            config = load_config()
+            youtube_cookies_browser = config.get("YOUTUBE_COOKIES_BROWSER")
+        except:
+            youtube_cookies_browser = None
+
         self.ytdl_opts = {
             "quiet": True,
             "skip_download": True,
@@ -134,6 +144,13 @@ class YouTubeMatcher:
                 }
             ],
         }
+
+        # Add browser cookies if configured (helps bypass bot detection)
+        if youtube_cookies_browser:
+            self.ytdl_opts["cookiesfrombrowser"] = (youtube_cookies_browser,)
+            logger.info(
+                f"Using {youtube_cookies_browser} cookies for YouTube authentication"
+            )
 
     def _extract_release_id(self, release_folder):
         """Extract release ID from folder path (format: {id}_{title})"""

@@ -113,26 +113,75 @@ Full logs available at: /home/user/.config/discogsDBLabelGen/logs/discogs_202510
 
 ## Common YouTube Error Types
 
-### 1. HTTP/Network Errors
+### 1. HTTP/Network Errors & Bot Detection
 
 **Symptoms:**
 - `HTTP Error 403: Forbidden`
 - `HTTP Error 429: Too Many Requests`
+- `Sign in to confirm you're not a bot`
 - `Unable to download webpage`
 - Network timeout errors
 
 **Possible Causes:**
+- **Bot Detection**: YouTube detects automated access (most common)
 - **Rate Limiting**: YouTube is limiting your requests (too many downloads in short time)
 - **Network Issues**: Internet connectivity problems or firewall blocking
 - **Outdated yt-dlp**: YouTube changed their API and yt-dlp needs updating
 - **Region Restrictions**: Content not available in your country
 
 **Solutions:**
-1. Wait a few minutes and try again (rate limiting usually temporary)
-2. Update yt-dlp: `pip install -U yt-dlp`
-3. Check internet connectivity: `ping youtube.com`
-4. Try accessing the YouTube URL directly in your browser
-5. Check if a VPN/proxy is interfering
+
+#### Best Solution: Use Browser Cookies (Bypasses Bot Detection)
+
+This makes yt-dlp use your browser's authentication, so YouTube sees requests as coming from a legitimate logged-in user.
+
+**Step 1: Update yt-dlp**
+```bash
+pip install -U yt-dlp
+```
+
+**Step 2: Configure browser cookies in your config file**
+
+Edit `~/.config/discogsDBLabelGen/discogs.env` and add:
+
+```json
+{
+  "DISCOGS_USER_TOKEN": "your_token_here",
+  "LIBRARY_PATH": "/path/to/library",
+  "YOUTUBE_COOKIES_BROWSER": "firefox"
+}
+```
+
+Replace `"firefox"` with your browser:
+- `"firefox"` - Mozilla Firefox
+- `"chrome"` - Google Chrome
+- `"chromium"` - Chromium
+- `"edge"` - Microsoft Edge
+- `"safari"` - Safari (macOS only)
+- `"brave"` - Brave Browser
+- `"opera"` - Opera
+
+**Step 3: Make sure you're logged into YouTube in that browser**
+
+Open your chosen browser and sign into YouTube.com. The sync tool will use those cookies automatically.
+
+**Step 4: Run sync**
+```bash
+./bin/sync.sh --dev
+```
+
+You should see in the logs:
+```
+Using firefox cookies for YouTube authentication
+```
+
+#### Alternative Solutions (if cookies don't work)
+
+1. **Wait and retry**: Rate limiting is often temporary (wait 5-10 minutes)
+2. **Check internet connectivity**: `ping youtube.com`
+3. **Try accessing YouTube URL in your browser**: Verify it's not a network issue
+4. **Check VPN/proxy settings**: Some VPNs trigger bot detection
+5. **Manual cookie export**: If auto-extraction fails, manually export cookies (advanced)
 
 ### 2. No YouTube Match Found
 
@@ -216,44 +265,55 @@ grep -i "http error" ~/.config/discogsDBLabelGen/logs/discogs_$(date +%Y%m%d).lo
 grep "12345678" ~/.config/discogsDBLabelGen/logs/sync_error_summary_*.log
 ```
 
-## Troubleshooting Workflow
+### Troubleshooting Workflow
 
 When YouTube downloads aren't working:
 
-1. **Run sync and check the summary**:
+1. **Configure browser cookies (if you see bot detection errors)**:
+   ```bash
+   # Edit config file
+   nano ~/.config/discogsDBLabelGen/discogs.env
+   
+   # Add this line (choose your browser):
+   "YOUTUBE_COOKIES_BROWSER": "firefox"
+   
+   # Make sure you're logged into YouTube in that browser
+   ```
+
+2. **Run sync and check the summary**:
    ```bash
    ./bin/sync.sh --dev
    # Check the error summary path printed at the end
    ```
 
-2. **Review the error summary report**:
+3. **Review the error summary report**:
    - Look at the DIAGNOSTICS section to understand error patterns
    - Check the RECOMMENDATIONS for specific troubleshooting steps
 
-3. **Test individual components**:
+4. **Test individual components**:
    ```bash
    # Test YouTube connectivity
    ping youtube.com
    
-   # Test yt-dlp
-   yt-dlp --verbose "https://www.youtube.com/watch?v=VIDEO_ID"
+   # Test yt-dlp with browser cookies
+   yt-dlp --cookies-from-browser firefox --verbose "https://www.youtube.com/watch?v=VIDEO_ID"
    
    # Test FFmpeg
    ffmpeg -version
    ```
 
-4. **Update dependencies if needed**:
+5. **Update dependencies if needed**:
    ```bash
    pip install -U yt-dlp
    ```
 
-5. **Check specific release details**:
+6. **Check specific release details**:
    - Error summary includes Release ID and Track Position
    - Navigate to release folder: `~/Music/DiscogsLibrary/{release_id}_{title}/`
    - Check `yt_matches.json` for YouTube search results
    - Check `metadata.json` for track information
 
-6. **Review full logs for context**:
+7. **Review full logs for context**:
    ```bash
    cat ~/.config/discogsDBLabelGen/logs/discogs_$(date +%Y%m%d).log | grep -A 5 -B 5 "ERROR"
    ```
