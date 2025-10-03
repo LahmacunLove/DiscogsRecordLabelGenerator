@@ -140,7 +140,7 @@ class ThreadMonitor:
             "\n[bold red]⚠️  Ctrl+C detected - terminating immediately...[/]"
         )
         # Force immediate exit - all worker threads/processes will be terminated
-        sys.exit(130)  # Standard exit code for SIGINT
+        os._exit(130)  # Standard exit code for SIGINT
 
     def is_shutdown_requested(self):
         """Check if shutdown has been requested"""
