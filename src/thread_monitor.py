@@ -319,10 +319,10 @@ class ThreadMonitor:
         )
         worker_table.add_column("", width=2, no_wrap=True)  # Status icon
         worker_table.add_column("#", width=4, style="yellow", no_wrap=True)
-        worker_table.add_column("Release", width=35, style="white", no_wrap=True)
+        worker_table.add_column("Release", width=25, style="white", no_wrap=True)
         worker_table.add_column("Progress", width=15, style="green", no_wrap=True)
         worker_table.add_column("Time", width=5, style="yellow", no_wrap=True)
-        worker_table.add_column("Step", width=18, style="cyan", no_wrap=True)
+        worker_table.add_column("Step", width=35, style="cyan", no_wrap=True)
 
         with self.lock:
             for worker_id in sorted(self.workers.keys()):
