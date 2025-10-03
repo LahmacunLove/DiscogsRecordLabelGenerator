@@ -15,8 +15,8 @@ import argparse
 import json
 from pathlib import Path
 
-# Add src/ to Python path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
+# Add src/ to Python path (go up one level from scripts/ to project root)
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from config import load_config, get_config_path
 from mirror import DiscogsLibraryMirror
