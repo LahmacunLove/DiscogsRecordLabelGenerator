@@ -228,3 +228,60 @@ That's it! The visualization will appear automatically.
 **Testing:** ✅ Passed
 **Documentation:** ✅ Complete
 **Dependencies:** ✅ Added to requirements.txt
+
+---
+
+## Bug Fixes
+
+### ProcessPoolExecutor Incompatibility (January 2025)
+
+**Issue:** After initial implementation, sync with `--max 1` showed the visualization but no releases were actually processed (Completed: 0/1).
+
+**Root Cause:**
+- In full mode (not `--discogs-only`), the code used `ProcessPoolExecutor` for parallel processing
+- Processes don't share memory like threads do
+- `ThreadMonitor` state updates happened in child processes but weren't visible to the main process
+- The tracker object couldn't be properly serialized/pickled for inter-process communication
+
+**Solution:**
+Changed executor selection logic in `src/mirror.py`:
+```python
+# Before:
+executor_class = (
+    concurrent.futures.ThreadPoolExecutor
+    if discogs_only
+    else concurrent.futures.ProcessPoolExecutor
+)
+
+# After:
+use_threads = discogs_only or (progress_callback is None)
+executor_class = (
+    concurrent.futures.ThreadPoolExecutor
+    if use_threads
+    else concurrent.futures.ProcessPoolExecutor
+)
+```
+
+**Explanation:**
+- Console mode (no `progress_callback`) now uses `ThreadPoolExecutor` for monitor compatibility
+- GUI mode (with `progress_callback`) can still use `ProcessPoolExecutor` since it doesn't need shared state
+- Threads share memory space, allowing `ThreadMonitor` to track worker state correctly
+
+**Testing:**
+```bash
+# Before fix: Completed: 0/1
+# After fix: Completed: 1/1, Worker 0 shows completion
+./bin/sync.sh --max 1
+
+# Verified with multiple releases
+./bin/sync.sh --max 2
+# Result: Completed: 2/2, Worker 0: 1, Worker 1: 1
+```
+
+**Impact:**
+- ✅ Visualization now works correctly in full mode
+- ✅ All releases are processed successfully
+- ✅ Worker state updates are visible in real-time
+- ✅ No performance degradation observed with ThreadPoolExecutor
+
+**Commit:** `sync/fix: Use ThreadPoolExecutor in console mode for monitor compatibility`
