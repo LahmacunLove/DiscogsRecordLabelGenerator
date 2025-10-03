@@ -164,6 +164,13 @@ class YouTubeMatcher:
     def fetch_release_YTmetadata(self, video_urls):
         self.youtube_release_metadata = []
 
+        if not video_urls or len(video_urls) == 0:
+            logger.youtube_error(
+                "No YouTube video URLs provided for release",
+                release_id=self.release_id,
+            )
+            return []
+
         if len(video_urls) <= 1:
             # Process single URLs normally
             for url in video_urls:
@@ -192,9 +199,15 @@ class YouTubeMatcher:
                     except Exception as e:
                         logger.warning(f"Error fetching metadata for {url}: {e}")
 
-            logger.success(
-                f"Fetched metadata for {len(self.youtube_release_metadata)}/{len(video_urls)} videos"
-            )
+            if len(self.youtube_release_metadata) > 0:
+                logger.success(
+                    f"Fetched metadata for {len(self.youtube_release_metadata)}/{len(video_urls)} videos"
+                )
+            else:
+                logger.youtube_error(
+                    f"Failed to fetch metadata for all {len(video_urls)} YouTube videos",
+                    release_id=self.release_id,
+                )
 
         return self.youtube_release_metadata
 
@@ -225,6 +238,15 @@ class YouTubeMatcher:
 
             video_urls = discogs_metadata["videos"]
             youtube_metadata = self.fetch_release_YTmetadata(video_urls)
+
+            # If no YouTube videos were successfully fetched, log error and return without creating yt_matches.json
+            if not youtube_metadata or len(youtube_metadata) == 0:
+                logger.youtube_error(
+                    "No YouTube metadata available - cannot match tracks. Will retry on next sync.",
+                    release_id=self.release_id,
+                )
+                self.matches = []
+                return
 
             if self.tracker:
                 self.tracker.update_step("Matching tracks with YouTube", 50)
@@ -363,13 +385,24 @@ class YouTubeMatcher:
                             }
                         )
 
-            # Save as JSON
-            with open(
-                os.path.join(self.release_folder, "yt_matches.json"),
-                "w",
-                encoding="utf-8",
-            ) as f:
-                json.dump(self.matches, f, indent=2, ensure_ascii=False)
+            # Only save yt_matches.json if we have valid matches (even if they're null matches)
+            # This ensures we don't create empty files for failed YouTube fetches
+            if self.matches and len(self.matches) > 0:
+                # Save as JSON
+                with open(
+                    os.path.join(self.release_folder, "yt_matches.json"),
+                    "w",
+                    encoding="utf-8",
+                ) as f:
+                    json.dump(self.matches, f, indent=2, ensure_ascii=False)
+                logger.debug(
+                    f"Saved {len(self.matches)} YouTube matches to yt_matches.json"
+                )
+            else:
+                logger.youtube_error(
+                    "No matches created - yt_matches.json not written. Will retry on next sync.",
+                    release_id=self.release_id,
+                )
 
         # Update original metadata with YouTube durations if Discogs duration is missing
         self.update_metadata_with_youtube_durations()

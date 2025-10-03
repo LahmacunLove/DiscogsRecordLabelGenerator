@@ -354,7 +354,13 @@ class DiscogsLibraryMirror:
         return local_ids
 
     def _is_release_complete(self, release_dir):
-        """Check if a release has completed all processing steps."""
+        """
+        Check if a release has completed all processing steps.
+
+        This will trigger a retry if:
+        - yt_matches.json is missing (need to retry YouTube matching)
+        - Any waveform files are missing (need to retry audio analysis)
+        """
         try:
             # Step 1: Metadata from Discogs
             metadata_file = release_dir / "metadata.json"
@@ -377,8 +383,12 @@ class DiscogsLibraryMirror:
                 return False
 
             # Step 2: YouTube videos matched
+            # Missing yt_matches.json means we should retry YouTube matching
             yt_matches_file = release_dir / "yt_matches.json"
             if not yt_matches_file.exists():
+                logger.debug(
+                    f"Release {release_dir.name} missing yt_matches.json - will retry YouTube matching"
+                )
                 return False
 
             # Load metadata to get expected tracks
@@ -392,32 +402,59 @@ class DiscogsLibraryMirror:
                 # No tracks expected, but basic files should exist
                 return True
 
+            # Load YouTube matches to see which tracks should have audio
+            with open(yt_matches_file, "r", encoding="utf-8") as f:
+                yt_matches = json.load(f)
+
+            # Create a map of track positions with YouTube matches
+            tracks_with_youtube = set()
+            for match in yt_matches:
+                if match.get("youtube_match") is not None:
+                    track_pos = match.get("track_position")
+                    if track_pos:
+                        tracks_with_youtube.add(track_pos)
+
             # Check each track for complete processing
             for track in tracklist:
                 track_pos = track.get("position", "")
                 if not track_pos:
                     continue
 
-                # Step 3: Audio downloaded
-                audio_file = release_dir / f"{track_pos}.opus"
-                if not audio_file.exists():
-                    return False
+                # Only check audio/analysis files if this track has a YouTube match
+                if track_pos in tracks_with_youtube:
+                    # Step 3: Audio downloaded
+                    audio_file = release_dir / f"{track_pos}.opus"
+                    audio_file_m4a = release_dir / f"{track_pos}.m4a"
+                    if not audio_file.exists() and not audio_file_m4a.exists():
+                        logger.debug(
+                            f"Release {release_dir.name} missing audio for track {track_pos} - will retry"
+                        )
+                        return False
 
-                # Step 4: Analysis JSON
-                analysis_file = release_dir / f"{track_pos}.json"
-                if not analysis_file.exists():
-                    return False
+                    # Step 4: Analysis JSON
+                    analysis_file = release_dir / f"{track_pos}.json"
+                    if not analysis_file.exists():
+                        logger.debug(
+                            f"Release {release_dir.name} missing analysis for track {track_pos} - will retry"
+                        )
+                        return False
 
-                # Step 5: Spectrograms
-                mel_spectro = release_dir / f"{track_pos}_Mel-spectogram.png"
-                hpcp_spectro = release_dir / f"{track_pos}_HPCP_chromatogram.png"
-                if not mel_spectro.exists() or not hpcp_spectro.exists():
-                    return False
+                    # Step 5: Spectrograms
+                    mel_spectro = release_dir / f"{track_pos}_Mel-spectogram.png"
+                    hpcp_spectro = release_dir / f"{track_pos}_HPCP_chromatogram.png"
+                    if not mel_spectro.exists() or not hpcp_spectro.exists():
+                        logger.debug(
+                            f"Release {release_dir.name} missing spectrograms for track {track_pos} - will retry"
+                        )
+                        return False
 
-                # Step 6: Waveform
-                waveform_file = release_dir / f"{track_pos}_waveform.png"
-                if not waveform_file.exists():
-                    return False
+                    # Step 6: Waveform (critical check - retry if missing)
+                    waveform_file = release_dir / f"{track_pos}_waveform.png"
+                    if not waveform_file.exists():
+                        logger.debug(
+                            f"Release {release_dir.name} missing waveform for track {track_pos} - will retry"
+                        )
+                        return False
 
             # Note: LaTeX files no longer required (using ReportLab PDF generation)
 
