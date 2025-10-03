@@ -123,6 +123,128 @@ This document contains questions and answers about the codebase behavior and imp
 
 **Implementation:** Uses `ThreadMonitor` class in `src/thread_monitor.py`, integrated in `src/mirror.py`. See [detailed implementation notes](../.assistant/QA_DETAILED.md) for technical details.
 
+### Q: How does progress tracking work during sync operations?
+
+**Asked:** 2025-01-10
+
+**Question:** What steps are shown during the sync process, and how is progress tracked throughout the entire pipeline?
+
+**Answer:**
+
+The sync process now has **comprehensive progress tracking** for every operation, eliminating "Idle" status during background operations.
+
+**Progress Tracking Pipeline:**
+
+1. **Initial Collection Loading (Before Worker Display)**
+   - Shows page-by-page Discogs API calls
+   - Format: "Fetching page N from Discogs API..."
+   - Format: "Downloaded X release IDs so far..."
+   - Eliminates waiting period before workers start
+
+2. **Per-Worker Progress (0-100%):**
+   - **5%**: Checking existing metadata
+   - **10%**: Fetching metadata from Discogs
+   - **20%**: Saving metadata
+   - **28-35%**: Downloading cover art (shows per-image progress)
+   - **35-50%**: Bandcamp operations (if applicable)
+     - 36%: Searching Bandcamp library
+     - 41-50%: Copying Bandcamp files (per-file progress)
+     - 70-85%: Analyzing Bandcamp audio (per-track progress)
+   - **45-70%**: YouTube operations (if no Bandcamp)
+     - 46%: Checking YouTube matches cache
+     - 47%: Fetching YouTube metadata
+     - 50%: Matching tracks with YouTube
+     - 60-70%: Downloading tracks (shows "track N/M (X%)")
+   - **85-90%**: Generating QR code
+   - **95-100%**: Creating LaTeX label
+
+**Key Features:**
+
+- **No "Idle" periods**: Every background operation shows what's happening
+- **Granular progress**: Multi-image downloads, multi-track processing all tracked
+- **Suppressed console spam**: yt-dlp output captured via progress hooks instead of printing
+- **Real-time updates**: Progress percentage updates as files download/process
+
+**YouTube Download Integration:**
+
+Previously, yt-dlp would print download progress directly to console:
+```
+[youtube] Downloading...
+[download] 45.2% of 5.23MiB at 1.2MiB/s...
+```
+
+Now, this is captured and integrated into the worker progress table:
+```
+Downloading track 3/12 (45%)
+```
+
+**Implementation Details:**
+
+**Tracker Parameter Pattern:**
+All methods in the sync pipeline accept an optional `tracker` parameter:
+```python
+def method_name(self, ..., tracker=None):
+    if tracker:
+        tracker.update_step("Description", progress_percent)
+```
+
+**Modified Methods:**
+- `src/mirror.py`:
+  - `get_collection_release_ids()` - Logs page fetching
+  - `save_cover_art()` - Per-image progress (28-35%)
+  - `find_bandcamp_release()` - Search progress (36%)
+  - `copy_bandcamp_audio_to_release_folder()` - Per-file progress (42-50%)
+  - `analyze_bandcamp_audio()` - Per-track progress (70-85%)
+  
+- `src/youtube_handler.py`:
+  - `YouTubeMatcher.__init__()` - Accepts tracker
+  - `match_discogs_release_youtube()` - Matching steps (46-50%)
+  - `audio_download_analyze()` - Download progress hooks (60-70%)
+  - `audio_download_only()` - Download progress hooks (60-85%)
+  - yt-dlp configured with: `quiet=True, no_warnings=True, progress_hooks=[...]`
+
+- `src/qr_generator.py`:
+  - `generate_qr_code_advanced()` - QR generation (86-90%)
+
+- `src/latex_generator.py`:
+  - `create_latex_label_file()` - Label creation (95-100%)
+
+**Progress Hook Example (yt-dlp):**
+```python
+def progress_hook(d):
+    if self.tracker and d["status"] == "downloading":
+        downloaded = d.get("downloaded_bytes", 0)
+        total = d.get("total_bytes", 0)
+        if total > 0:
+            percent = (downloaded / total) * 100
+            self.tracker.update_step(
+                f"Downloading track {N}/{M} ({percent:.0f}%)",
+                overall_progress
+            )
+```
+
+**Testing:**
+```bash
+# Watch progress tracking in action
+source venv/bin/activate
+python3 scripts/sync.py --dev --max 5
+
+# You should see:
+# - Discogs page fetching before workers start
+# - Detailed step-by-step progress for each worker
+# - No "Idle" status during downloads
+# - YouTube downloads integrated into progress table
+```
+
+**Relevant Files:**
+- `src/mirror.py` - Core sync pipeline with tracker integration
+- `src/youtube_handler.py` - YouTube download progress hooks
+- `src/qr_generator.py` - QR code generation tracking
+- `src/latex_generator.py` - LaTeX label generation tracking
+- `src/thread_monitor.py` - Worker state tracking and display
+
+**Related Topics:** Multi-threaded processing, progress visualization, yt-dlp integration, worker monitoring
+
 ### Q: How does Ctrl+C work during sync operations?
 
 **Asked:** 2025-01-XX
@@ -182,6 +304,16 @@ python3 scripts/sync.py --dev
 **Related Topics:** Multi-threaded processing, signal handling, immediate termination, SIGINT handling
 
 ---
+
+### Q: How is YouTube download progress displayed in the sync monitor?
+
+**Asked:** 2025-01-XX
+
+**Question:** When downloading audio from YouTube, how is the progress integrated into the worker status display instead of cluttering the console with raw yt-dlp output?
+
+**Answer:**
+
+YouTube
 
 ## Contributing to this Document
 

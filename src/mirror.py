@@ -132,7 +132,9 @@ class DiscogsLibraryMirror:
         )
         return audio_files
 
-    def copy_bandcamp_audio_to_release_folder(self, bandcamp_folder, metadata, tracker=None):
+    def copy_bandcamp_audio_to_release_folder(
+        self, bandcamp_folder, metadata, tracker=None
+    ):
         """Copy Bandcamp audio files to release folder with proper naming"""
         if tracker:
             tracker.update_step("Preparing Bandcamp files", 41)
@@ -157,7 +159,9 @@ class DiscogsLibraryMirror:
         for i, audio_file in enumerate(audio_files):
             if tracker and total_files > 0:
                 progress = 42 + (i / total_files) * 8  # 42-50% range
-                tracker.update_step(f"Copying Bandcamp file {i + 1}/{total_files}", progress)
+                tracker.update_step(
+                    f"Copying Bandcamp file {i + 1}/{total_files}", progress
+                )
             if i >= len(tracklist):
                 logger.warning(
                     f"More audio files than tracks in tracklist, stopping at {i}"
@@ -202,8 +206,10 @@ class DiscogsLibraryMirror:
         for track_idx, track in enumerate(tracklist):
             if tracker and total_tracks > 0:
                 progress = 70 + (track_idx / total_tracks) * 15  # 70-85% range
-                tracker.update_step(f"Analyzing Bandcamp track {track_idx + 1}/{total_tracks}", progress)
-</parameter>
+                tracker.update_step(
+                    f"Analyzing Bandcamp track {track_idx + 1}/{total_tracks}", progress
+                )
+
             track_position = track.get("position", "")
             if not track_position:
                 continue
@@ -891,7 +897,9 @@ class DiscogsLibraryMirror:
             if tracker:
                 tracker.update_step("Copying Bandcamp audio", 40)
             logger.info(f"🎵 Found Bandcamp release: {bandcamp_folder}")
-            if self.copy_bandcamp_audio_to_release_folder(bandcamp_folder, metadata, tracker):
+            if self.copy_bandcamp_audio_to_release_folder(
+                bandcamp_folder, metadata, tracker
+            ):
                 logger.success(f"✅ Using high-quality Bandcamp audio for {release_id}")
                 used_bandcamp = True
 
@@ -906,7 +914,9 @@ class DiscogsLibraryMirror:
                     if tracker:
                         tracker.update_step("Analyzing Bandcamp audio", 70)
                     # Analyze Bandcamp audio files
-                    self.analyze_bandcamp_audio(metadata, download_only=False, tracker=tracker)
+                    self.analyze_bandcamp_audio(
+                        metadata, download_only=False, tracker=tracker
+                    )
             else:
                 logger.warning(
                     "⚠️ Failed to copy Bandcamp audio, falling back to YouTube"
@@ -954,7 +964,9 @@ class DiscogsLibraryMirror:
             if tracker:
                 tracker.update_step("Generating QR code", 85)
             # create qr code with cover background
-            generate_qr_code_advanced(self.release_folder, release_id, metadata, tracker)
+            generate_qr_code_advanced(
+                self.release_folder, release_id, metadata, tracker
+            )
             if tracker:
                 qr_files = list(self.release_folder.glob("*qr*.png"))
                 if qr_files:
@@ -1369,8 +1381,12 @@ class DiscogsLibraryMirror:
         for i, image in enumerate(images):
             try:
                 if tracker:
-                    progress = 30 + (i / len(images)) * 5  # 30-35% range for cover downloads
-                    tracker.update_step(f"Downloading cover art {i + 1}/{len(images)}", progress)
+                    progress = (
+                        30 + (i / len(images)) * 5
+                    )  # 30-35% range for cover downloads
+                    tracker.update_step(
+                        f"Downloading cover art {i + 1}/{len(images)}", progress
+                    )
 
                 image_url = image["uri"]
 
@@ -1404,7 +1420,6 @@ class DiscogsLibraryMirror:
                 logger.success(f"Downloaded: {filename}")
 
             except Exception as e:
-</parameter>
                 logger.warning(f"Failed to download image {i + 1}: {e}")
                 continue
 
