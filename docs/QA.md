@@ -13,6 +13,7 @@ This document contains questions and answers about the codebase behavior and imp
 - [API Integration](#api-integration)
 - [Audio Analysis](#audio-analysis)
 - [Multi-Threaded Processing](#multi-threaded-processing)
+- [Error Logging and Diagnostics](#error-logging-and-diagnostics)
 
 ---
 
@@ -519,6 +520,87 @@ python3 scripts/sync.py --dev
 
 YouTube
 
+---
+
+## Error Logging and Diagnostics
+
+### Q: How does error logging and summary report generation work after sync operations?
+
+**Asked:** 2025-10-03
+
+**Question:** How can I see why YouTube downloads aren't working? Is it an HTTP traffic issue or a code problem? Can we generate error logs after sync.sh completes?
+
+**Answer:** 
+
+The system now includes **comprehensive error tracking and summary report generation** specifically for YouTube download issues and general errors that occur during sync operations.
+
+**Error Tracking System** (`src/logger.py`):
+
+1. **Automatic Error Collection**:
+   - YouTube-specific errors are tracked separately from general errors
+   - Each error captures: timestamp, message, release_id, track_position, URL, and exception details
+   - Errors are accumulated throughout the sync operation
+
+2. **Error Summary Report Generation**:
+   - Automatically generated at the end of every sync operation
+   - Saved to: `~/.config/discogsDBLabelGen/logs/sync_error_summary_YYYYMMDD_HHMMSS.log`
+   - Full detailed logs available at: `~/.config/discogsDBLabelGen/logs/discogs_YYYYMMDD.log`
+
+**Report Structure**:
+- **Summary**: Total YouTube errors, general errors, and sync duration
+- **YouTube Download Errors**: Detailed list with release ID, track position, URL, and exception
+- **Diagnostics**: Automatic classification of error types:
+  - HTTP/Network errors (connectivity, rate limiting, firewall issues)
+  - No match found (content not on YouTube, region restrictions)
+  - Download failed (other download issues)
+- **Recommendations**: Troubleshooting steps based on detected error patterns
+
+**Implementation Details**:
+
+`src/logger.py` (lines 86-94):
+```python
+def youtube_error(self, message, release_id=None, track_position=None, url=None, exception=None):
+    """Track YouTube-specific errors with context"""
+    context = {
+        "release_id": release_id,
+        "track_position": track_position,
+        "url": url,
+        "exception": str(exception)
+    }
+    self.error(message, error_type="youtube", context=context)
+```
+
+`src/youtube_handler.py` (lines 122-124):
+- Extracts release_id from folder name for error context
+- All YouTube errors now use `logger.youtube_error()` instead of generic `logger.error()`
+- Tracks: no match errors, download failures, and exceptions with full context
+
+`scripts/sync.py` (lines 68, 101-103):
+- Calls `logger.start_sync()` at beginning of sync operation
+- Calls `logger.generate_error_summary()` in finally block to ensure report generation
+- Report generated even if sync is interrupted or fails
+
+**Usage Example**:
+
+After running `./bin/sync.sh`, check the error summary:
+```bash
+cat ~/.config/discogsDBLabelGen/logs/sync_error_summary_*.log
+```
+
+**Diagnostic Features**:
+- Automatically detects HTTP/network issues vs. content availability issues
+- Provides specific troubleshooting steps (update yt-dlp, check ffmpeg, test connectivity)
+- Links to full detailed logs for deep investigation
+
+**Relevant Files:**
+- `src/logger.py` (lines 57-217) - Error tracking and summary generation
+- `src/youtube_handler.py` (lines 122-143, 488-553, 618-687) - YouTube error tracking with context
+- `scripts/sync.py` (lines 68, 101-103) - Sync lifecycle integration
+
+**Related Topics:** [Multi-Threaded Processing](#multi-threaded-processing), [API Integration](#api-integration)
+
+---
+
 ## Contributing to this Document
 
 When adding new Q&A entries:
@@ -542,6 +624,8 @@ When adding new Q&A entries:
 ---
 
 *Last updated: 2025-10-03*
+
+*Error logging feature added: 2025-10-03*
 
 ---
 

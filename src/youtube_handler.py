@@ -119,6 +119,8 @@ class YouTubeMatcher:
         self.tracker = tracker
         self.current_track_index = 0
         self.total_tracks = 0
+        # Extract release_id from folder name for error tracking
+        self.release_id = self._extract_release_id(release_folder)
         self.ytdl_opts = {
             "quiet": True,
             "skip_download": True,
@@ -132,6 +134,14 @@ class YouTubeMatcher:
                 }
             ],
         }
+
+    def _extract_release_id(self, release_folder):
+        """Extract release ID from folder path (format: {id}_{title})"""
+        folder_name = os.path.basename(release_folder)
+        # Release folders are typically named: {release_id}_{release_title}
+        if "_" in folder_name:
+            return folder_name.split("_")[0]
+        return folder_name
 
     def fetch_single_metadata(self, url):
         logger.debug(f"Fetching metadata from: {url}")
@@ -478,8 +488,11 @@ class YouTubeMatcher:
         for i, match in enumerate(self.matches):
             self.current_track_index = i
             if match["youtube_match"] is None:
-                logger.warning(
-                    f"No YouTube match for track {match.get('track_position', i)}"
+                track_pos = match.get("track_position", i)
+                logger.youtube_error(
+                    f"No YouTube match for track {track_pos}",
+                    release_id=self.release_id,
+                    track_position=track_pos,
                 )
                 continue
 
@@ -522,12 +535,21 @@ class YouTubeMatcher:
                     logger.success(f"Downloaded: {os.path.basename(downloaded_file)}")
                     downloaded_tracks.append((track_filename_base, track_position))
                 else:
-                    logger.error(
-                        f"Download failed for track {track_position} - no file found"
+                    logger.youtube_error(
+                        f"Download failed for track {track_position} - no file found",
+                        release_id=self.release_id,
+                        track_position=track_position,
+                        url=url,
                     )
 
             except Exception as e:
-                logger.error(f"Download error for track {track_position}: {e}")
+                logger.youtube_error(
+                    f"Download error for track {track_position}: {e}",
+                    release_id=self.release_id,
+                    track_position=track_position,
+                    url=url,
+                    exception=e,
+                )
                 continue
 
         # Analysis phase - parallel analysis of all downloaded tracks
@@ -598,8 +620,11 @@ class YouTubeMatcher:
         for i, match in enumerate(self.matches):
             self.current_track_index = i
             if match["youtube_match"] is None:
-                logger.warning(
-                    f"[{release_folder_name}] No YouTube match for track {match.get('track_position', i)}"
+                track_pos = match.get("track_position", i)
+                logger.youtube_error(
+                    f"[{release_folder_name}] No YouTube match for track {track_pos}",
+                    release_id=self.release_id,
+                    track_position=track_pos,
                 )
                 continue
 
@@ -644,13 +669,20 @@ class YouTubeMatcher:
                     )
                     downloaded_tracks.append((track_filename_base, track_position))
                 else:
-                    logger.error(
-                        f"[{release_folder_name}] Download failed for track {track_position} - no file found"
+                    logger.youtube_error(
+                        f"[{release_folder_name}] Download failed for track {track_position} - no file found",
+                        release_id=self.release_id,
+                        track_position=track_position,
+                        url=url,
                     )
 
             except Exception as e:
-                logger.error(
-                    f"[{release_folder_name}] Download error for track {track_position}: {e}"
+                logger.youtube_error(
+                    f"[{release_folder_name}] Download error for track {track_position}: {e}",
+                    release_id=self.release_id,
+                    track_position=track_position,
+                    url=url,
+                    exception=e,
                 )
                 continue
 

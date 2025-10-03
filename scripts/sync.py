@@ -65,6 +65,9 @@ def sync_library(mode="dev", max_releases=None, dryrun=False):
     logger.separator("Starting Library Sync")
     logger.info(f"Mode: {mode}")
 
+    # Start error tracking
+    logger.start_sync()
+
     if dryrun:
         logger.info("DRY RUN MODE: No API calls or downloads will be made")
 
@@ -95,6 +98,9 @@ def sync_library(mode="dev", max_releases=None, dryrun=False):
     except Exception as e:
         logger.error(f"Sync failed: {e}")
         raise
+    finally:
+        # Generate error summary report
+        logger.generate_error_summary()
 
 
 def generate_labels(
