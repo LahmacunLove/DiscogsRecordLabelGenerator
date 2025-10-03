@@ -234,8 +234,8 @@ Structure:
 Final output: Printable PDF with all labels.
 
 Features:
-- Formatted for 8163 shipping labels
-- Multiple labels per page
+- Formatted for Avery Zweckform L4744REV-65 labels (96 x 50.8 mm on A4 paper)
+- 10 labels per page (2 columns x 5 rows)
 - Ready to print
 
 ## Configuration Directory

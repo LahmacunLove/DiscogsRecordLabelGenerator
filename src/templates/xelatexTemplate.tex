@@ -15,7 +15,7 @@
 
 % Font configuration for Unicode support
 \setmainfont{FreeSerif}
-\setsansfont{FreeSans}  
+\setsansfont{FreeSans}
 \setmonofont{FreeMono}
 
 % Multilingual font configuration
@@ -50,13 +50,13 @@
 % DYNAMIC_PACKAGES_PLACEHOLDER
 % This will be replaced with script-specific packages based on detected Unicode scripts
 
-% DYNAMIC_FONTS_PLACEHOLDER  
+% DYNAMIC_FONTS_PLACEHOLDER
 % This will be replaced with font declarations based on detected Unicode scripts
 
-% Adjust page margins
-% \usepackage[a4paper]{geometry}
-% -->  8163 shipping label<--
-\usepackage[letterpaper,margin=0.1562in,top=0.6in]{geometry}
+% Adjust page margins for Avery Zweckform L4744REV-65
+% A4 paper with 2 columns x 5 rows = 10 labels per page
+% Label size: 96mm x 50.8mm (3.78" x 2")
+\usepackage[a4paper,left=0.276in,right=0.276in,top=0.846in,bottom=0.846in]{geometry}
 
 % Package
 \usepackage{tikz}

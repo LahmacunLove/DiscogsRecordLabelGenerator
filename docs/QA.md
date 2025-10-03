@@ -30,7 +30,27 @@ This document contains questions and answers about the codebase behavior and imp
 
 ## Label Generation
 
-*Questions about the label generation process and LaTeX template system will be documented here.*
+### Q: What label format is used for printing?
+
+**A:** The system uses **Avery Zweckform L4744REV-65** labels:
+- **Label size**: 96 x 50.8 mm (3.78" x 2")
+- **Paper format**: A4 (210 x 297 mm)
+- **Layout**: 2 columns x 5 rows = 10 labels per sheet
+- **Form**: Rectangular with rounded corners
+- **Compatibility**: Inkjet, Laser B&W, Color Laser
+
+**Implementation locations**:
+- LaTeX templates: `src/templates/xelatexTemplate.tex` and `src/templates/latexTemplate.tex`
+  - Geometry package settings define A4 paper with appropriate margins
+  - Left/right margins: 0.276 inches (7mm)
+  - Top/bottom margins: 0.846 inches (21.5mm)
+- Label generation: `src/latex_generator.py`
+  - Line ~616: Minipage dimensions set to 9.6cm x 5.08cm (96mm x 50.8mm)
+  - Line ~862: TikZ rectangle dimensions set to 3.78in x 2in
+  - Line ~868: Column spacing set to 3.937 inches (3.78" label + 0.157" gap)
+  - Line ~646: Tabularx width set to 3.78 inches
+
+**Note**: The system previously used US Letter paper with 4" x 2" labels. The change to Avery L4744REV-65 maintains the same height (50.8mm = 2") but reduces width from 101.6mm to 96mm to match standard European label sheets.
 
 ---
 

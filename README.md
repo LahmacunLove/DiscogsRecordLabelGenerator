@@ -119,7 +119,7 @@ Each release creates a directory with:
 - QR codes (plain and fancy)
 - LaTeX label snippets
 
-Labels are compiled into PDFs in `output_labels/`, formatted for 8163 shipping labels.
+Labels are compiled into PDFs in `output_labels/`, formatted for **Avery Zweckform L4744REV-65** labels (96 x 50.8 mm on A4 paper, 10 labels per sheet).
 
 ## License
 

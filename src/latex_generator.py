@@ -613,13 +613,14 @@ def _create_label_original(release_folder, metadata, label_file):
         release_id = str(metadata.get("id", ""))
 
         # Minipage method with proper adjustbox structure
-        latex_content = f"""\\begin{{minipage}}[t][4.4cm][t]{{9.5cm}}
+        # Adjusted for Avery L4744REV-65: 96mm x 50.8mm (3.78" x 2" = 9.6cm x 5.08cm)
+        latex_content = f"""\\begin{{minipage}}[t][5.08cm][t]{{9.6cm}}
 
-\\begin{{adjustbox}}{{max width=8cm}}
+\\begin{{adjustbox}}{{max width=9cm}}
   \\textbf{{{unicode_to_latex(artist_str)}}}
 \\end{{adjustbox}} \\\\
 
-\\begin{{adjustbox}}{{max width=8cm}}
+\\begin{{adjustbox}}{{max width=9cm}}
   {unicode_to_latex(title)}
 \\end{{adjustbox}}
 
@@ -642,8 +643,8 @@ def _create_label_original(release_folder, metadata, label_file):
         with open(label_file, "w", encoding="utf-8") as f:
             f.write(latex_content)
 
-        # Adapted tabularx conversion for minipage (3.74in = approx. 9.5cm, +8mm from original)
-        inplace_change(label_file, "\\begin{tabular}", "\\begin{tabularx}{3.74in}")
+        # Adapted tabularx conversion for minipage (3.78in = 96mm for Avery L4744REV-65)
+        inplace_change(label_file, "\\begin{tabular}", "\\begin{tabularx}{3.78in}")
         inplace_change(label_file, "\\end{tabular}", "\\end{tabularx}")
 
         logger.success(f"Original LaTeX label created: {os.path.basename(label_file)}")
@@ -814,7 +815,8 @@ def combine_latex_labels(
 
     logger.process(f"Combining {len(release_dirs)} LaTeX labels for printing...")
 
-    # Configuration for 8163 shipping labels (original layout)
+    # Configuration for Avery Zweckform L4744REV-65 labels
+    # 96mm x 50.8mm on A4 paper
     labels_per_page = 10  # 2 columns x 5 rows
     pages_needed = (len(release_dirs) + labels_per_page - 1) // labels_per_page
 
@@ -850,24 +852,25 @@ def combine_latex_labels(
 
                     f.write("\\begin{tikzpicture}[thick,font=\\Large]\n")
 
-                    # 5 rows x 2 columns = 10 labels per page (original layout)
+                    # 5 rows x 2 columns = 10 labels per page (Avery L4744REV-65)
                     for row in range(5):
                         if release_idx >= len(release_dirs):
                             break
-                        for col in [0, 1]:  # Original used [0,1]
+                        for col in [0, 1]:
                             release_num = (col + 1) + (row * 2) + (page * 10)
                             if release_num > len(release_dirs):
                                 break
 
                             release_dir, label_filename = release_dirs[release_idx]
 
-                            # Calculate position (original coordinates)
-                            x_pos = 4.1 * col  # Original: 4.1 inches column spacing
-                            y_pos = row * -2  # Original: -2 inches per row
+                            # Calculate position for Avery L4744REV-65
+                            # Label: 96mm (3.78") width, gap: ~4mm (0.157")
+                            x_pos = 3.937 * col  # 3.78" label + 0.157" gap
+                            y_pos = row * -2  # 50.8mm = 2" per row
 
-                            # Label frame (original design)
+                            # Label frame with rounded corners for Avery L4744REV-65
                             f.write(
-                                f"\t\\draw[rounded corners=0.5cm] ({x_pos} in, {y_pos} in) rectangle +(4in,2in);\n"
+                                f"\t\\draw[rounded corners=0.5cm] ({x_pos} in, {y_pos} in) rectangle +(3.78in,2in);\n"
                             )
 
                             # QR code position (prioritize fancy QR, fallback to plain QR)
@@ -896,7 +899,7 @@ def combine_latex_labels(
                                     f"\\includegraphics[width=1.5cm]{{{qr_path}}}}};\n"
                                 )
 
-                            # Include label content and some small adjustment: (this is where to play around to make it fit)
+                            # Include label content with adjusted positioning for Avery L4744REV-65
                             content_x = x_pos + 0.105
                             content_y = y_pos + 0.975
                             # Absolute path to label file
