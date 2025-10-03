@@ -17,6 +17,7 @@ import re
 import urllib.request
 import youtube_handler
 import concurrent.futures
+import threading
 import json
 import shutil
 import re
@@ -27,6 +28,7 @@ from qr_generator import generate_qr_code_advanced
 from utils import sanitize_filename
 from tqdm import tqdm
 import glob
+from thread_monitor import ThreadMonitor, WorkerProgressTracker
 
 
 class DiscogsLibraryMirror:
@@ -579,28 +581,103 @@ class DiscogsLibraryMirror:
                             completed, len(releases_to_process), mode_desc
                         )
         else:
-            # Console mode - use tqdm
-            with tqdm(
-                total=len(releases_to_process), desc=mode_desc, unit="release"
-            ) as pbar:
-                with executor_class(max_workers=optimal_workers) as executor:
-                    futures = [
-                        executor.submit(
-                            self.sync_single_release,
-                            release_id,
-                            download_only,
-                            discogs_only,
-                        )
-                        for release_id in releases_to_process
-                    ]
+            # Console mode - use ThreadMonitor for live visualization
+            monitor = ThreadMonitor(
+                total_releases=len(releases_to_process),
+                num_workers=optimal_workers,
+                mode_desc=mode_desc,
+            )
 
-                    for future in concurrent.futures.as_completed(futures):
-                        try:
-                            result = future.result()
-                            pbar.update(1)  # Increase progress by 1
-                        except Exception as e:
-                            logger.error(f"Error during synchronization: {e}")
-                            pbar.update(1)  # Also increase progress on errors
+            # Create a mapping of worker threads to IDs
+            worker_id_map = {}
+            worker_id_lock = threading.Lock()
+            next_worker_id = [0]  # Use list to make it mutable in nested function
+
+            def sync_with_monitoring(release_id, download_only, discogs_only):
+                """Wrapper to add monitoring to sync_single_release"""
+                # Assign worker ID
+                thread_id = threading.current_thread().ident
+                with worker_id_lock:
+                    if thread_id not in worker_id_map:
+                        worker_id_map[thread_id] = next_worker_id[0]
+                        next_worker_id[0] += 1
+                    worker_id = worker_id_map[thread_id]
+
+                tracker = WorkerProgressTracker(monitor, worker_id)
+
+                try:
+                    # Check for shutdown before starting
+                    if tracker.check_shutdown():
+                        return None
+
+                    # Call the original sync function with tracking
+                    result = self.sync_single_release_monitored(
+                        release_id, download_only, discogs_only, tracker
+                    )
+
+                    if not tracker.check_shutdown():
+                        tracker.complete()
+                    return result
+
+                except Exception as e:
+                    tracker.error(str(e))
+                    raise
+
+            # Use Live display context
+            from rich.live import Live
+            from rich.console import Console
+
+            console = Console()
+
+            try:
+                with Live(
+                    monitor._build_display(), console=console, refresh_per_second=2
+                ) as live:
+                    with executor_class(max_workers=optimal_workers) as executor:
+                        futures = [
+                            executor.submit(
+                                sync_with_monitoring,
+                                release_id,
+                                download_only,
+                                discogs_only,
+                            )
+                            for release_id in releases_to_process
+                        ]
+
+                        for future in concurrent.futures.as_completed(futures):
+                            if monitor.is_shutdown_requested():
+                                # Cancel remaining futures
+                                for f in futures:
+                                    f.cancel()
+                                break
+
+                            try:
+                                result = future.result()
+                            except Exception as e:
+                                logger.error(f"Error during synchronization: {e}")
+
+                            # Update display
+                            live.update(monitor._build_display())
+
+                    # Final update
+                    time.sleep(0.5)
+                    live.update(monitor._build_display())
+
+                # Print summary
+                if monitor.is_shutdown_requested():
+                    console.print("\n[bold yellow]⚠️  Shutdown completed[/]")
+                else:
+                    console.print(f"\n[bold green]✅ All releases processed![/]")
+
+                console.print(
+                    f"[bold]Completed:[/] {monitor.completed_count}/{monitor.total_releases}"
+                )
+                if monitor.error_count > 0:
+                    console.print(f"[bold red]Errors:[/] {monitor.error_count}")
+
+            except KeyboardInterrupt:
+                monitor._signal_handler(None, None)
+                console.print("\n[bold yellow]⚠️  Interrupted by user[/]")
 
         # Remove deleted releases
         # removed_ids = local_ids - discogs_ids
@@ -609,6 +686,21 @@ class DiscogsLibraryMirror:
         #     self.delete_release_folder(release_id)
 
     def sync_single_release(self, release_id, download_only=False, discogs_only=False):
+        """Original sync method without monitoring - for callback mode"""
+        return self.sync_single_release_monitored(
+            release_id, download_only, discogs_only, None
+        )
+
+    def sync_single_release_monitored(
+        self, release_id, download_only=False, discogs_only=False, tracker=None
+    ):
+        """Sync a single release with optional progress tracking"""
+
+        # Initialize tracking
+        if tracker:
+            tracker.set_release(release_id, f"Release {release_id}")
+            tracker.update_step("Checking existing metadata", 5)
+
         # Check if metadata.json already exists to avoid unnecessary Discogs API calls
         title_placeholder = str(release_id)  # Temporary title for folder detection
         potential_folders = [
@@ -638,6 +730,9 @@ class DiscogsLibraryMirror:
 
         # Only call Discogs API if we don't have metadata
         if metadata is None:
+            if tracker:
+                tracker.update_step("Fetching metadata from Discogs", 10)
+
             # Save new releases
             collectionElement = self.discogs.release(
                 release_id
@@ -712,30 +807,58 @@ class DiscogsLibraryMirror:
         title = sanitize_filename(metadata.get("title", release_id))
         self.release_folder = self.library_path / f"{release_id}_{title}"
 
+        # Update tracker with actual title
+        if tracker:
+            tracker.set_release(release_id, title)
+            tracker.update_step("Saving metadata", 20)
+
         # do all discogs stuff
         # save metadata
         self.save_release_metadata(release_id, metadata)
+        if tracker:
+            tracker.add_file(str(self.release_folder / "metadata.json"))
         # save coverart
+        if tracker:
+            tracker.update_step("Downloading cover art", 30)
         self.save_cover_art(release_id, metadata)
+        if tracker:
+            cover_files = list(self.release_folder.glob("cover.*"))
+            if cover_files:
+                tracker.add_file(str(cover_files[0]))
 
         # Discogs-only mode: skip audio processing entirely
         if discogs_only:
+            if tracker:
+                tracker.update_step("Completed (Discogs-only)", 100)
             logger.info(
                 f"📀 Discogs-only mode: metadata and covers saved for {release_id}"
             )
             return
 
         # Check for Bandcamp high-quality audio first
+        if tracker:
+            tracker.update_step("Checking for Bandcamp audio", 35)
         bandcamp_folder = self.find_bandcamp_release(metadata)
         used_bandcamp = False
 
         if bandcamp_folder:
+            if tracker:
+                tracker.update_step("Copying Bandcamp audio", 40)
             logger.info(f"🎵 Found Bandcamp release: {bandcamp_folder}")
             if self.copy_bandcamp_audio_to_release_folder(bandcamp_folder, metadata):
                 logger.success(f"✅ Using high-quality Bandcamp audio for {release_id}")
                 used_bandcamp = True
 
+                if tracker:
+                    audio_files = list(self.release_folder.glob("*.flac")) + list(
+                        self.release_folder.glob("*.mp3")
+                    )
+                    for audio_file in audio_files[:3]:  # Show first 3 files
+                        tracker.add_file(str(audio_file))
+
                 if not download_only:
+                    if tracker:
+                        tracker.update_step("Analyzing Bandcamp audio", 70)
                     # Analyze Bandcamp audio files
                     self.analyze_bandcamp_audio(metadata, download_only=False)
             else:
@@ -745,6 +868,8 @@ class DiscogsLibraryMirror:
 
         # Fallback to YouTube if no Bandcamp or if copy failed
         if not used_bandcamp:
+            if tracker:
+                tracker.update_step("Searching YouTube", 45)
             logger.info(f"🎬 Using YouTube audio for {release_id}")
             yt_searcher = youtube_handler.YouTubeMatcher(
                 self.release_folder, False
@@ -754,21 +879,47 @@ class DiscogsLibraryMirror:
             )  # match metadata and save matches
 
             if download_only:
+                if tracker:
+                    tracker.update_step("Downloading YouTube audio", 60)
                 # Download-only mode: only download audio files without analysis
                 logger.info(
                     f"[{release_id}] Download-only mode: downloading audio without analysis"
                 )
                 yt_searcher.audio_download_only(metadata)
+                if tracker:
+                    audio_files = list(self.release_folder.glob("*.opus")) + list(
+                        self.release_folder.glob("*.m4a")
+                    )
+                    for audio_file in audio_files[:3]:
+                        tracker.add_file(str(audio_file))
             else:
+                if tracker:
+                    tracker.update_step("Downloading & analyzing YouTube audio", 60)
                 # Normal mode: download and analyze
                 yt_searcher.audio_download_analyze(metadata)  # download matches
+                if tracker:
+                    audio_files = list(self.release_folder.glob("*.opus")) + list(
+                        self.release_folder.glob("*.m4a")
+                    )
+                    for audio_file in audio_files[:3]:
+                        tracker.add_file(str(audio_file))
 
         if not download_only:
+            if tracker:
+                tracker.update_step("Generating QR code", 85)
             # create qr code with cover background
             generate_qr_code_advanced(self.release_folder, release_id, metadata)
+            if tracker:
+                qr_files = list(self.release_folder.glob("*qr*.png"))
+                if qr_files:
+                    tracker.add_file(str(qr_files[0]))
 
+            if tracker:
+                tracker.update_step("Creating LaTeX label", 95)
             # create latex labels
             create_latex_label_file(self.release_folder, metadata)
+            if tracker:
+                tracker.add_file(str(self.release_folder / "label.tex"))
 
     def regenerate_latex_label(self, release_id):
         """Regenerates only the LaTeX label for an existing release without sync operations"""

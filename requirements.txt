@@ -11,3 +11,4 @@ numpy
 scikit-learn
 librosa
 python-dateutil
+rich

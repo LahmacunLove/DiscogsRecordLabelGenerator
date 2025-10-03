@@ -55,6 +55,38 @@ This will guide you through getting your [Discogs API token](https://www.discogs
 4. Generates QR codes with cover art
 5. Creates printable PDF labels with LaTeX
 
+## Features
+
+### Multi-Threaded Processing with Live CLI Visualization
+
+The sync process now features a real-time multi-threaded CLI display that shows:
+
+- **Per-Worker Progress**: Each worker thread displayed in its own panel
+- **Current Status**: Live updates showing what step each worker is processing
+- **File Tracking**: See files as they're generated (metadata, covers, audio, labels)
+- **Progress Indicators**: Visual progress bars and percentage completion per worker
+- **Graceful Shutdown**: Press Ctrl+C to stop all threads cleanly
+- **Overall Statistics**: Total progress, error count, elapsed time
+
+**Example Display:**
+```
+🎵 Processing releases
+Progress: 15/50 (30.0%) │ Errors: 1 │ Workers: 4 │ Time: 5m 23s
+
+┌─ 🟢 Worker 0 │ Completed: 3 ─────────────────┐┌─ 🟢 Worker 1 │ Completed: 4 ─────────────────┐
+│ Release: 123456                               ││ Release: 789012                               │
+│ Title: Kind of Blue                           ││ Title: Abbey Road                             │
+│ Step: Downloading audio                       ││ Step: Analyzing audio                         │
+│ [████████████████░░░░] 60%                    ││ [██████████████████░] 75%                     │
+│ Time: 45s                                     ││ Time: 62s                                     │
+│ Files: • metadata.json                        ││ Files: • track01.opus                         │
+│        • cover.jpg                            ││        • track02.opus                         │
+│        • track01.opus                         ││        • waveform.png                         │
+└───────────────────────────────────────────────┘└───────────────────────────────────────────────┘
+```
+
+**Test it:** Run `python3 tests/test_monitor.py` to see a demo with simulated releases.
+
 ## Commands
 
 ```bash
