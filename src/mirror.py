@@ -419,10 +419,7 @@ class DiscogsLibraryMirror:
                 if not waveform_file.exists():
                     return False
 
-            # Step 7: LaTeX file
-            latex_file = release_dir / "label.tex"
-            if not latex_file.exists():
-                return False
+            # Note: LaTeX files no longer required (using ReportLab PDF generation)
 
             # All steps complete!
             return True
@@ -488,26 +485,9 @@ class DiscogsLibraryMirror:
                 logger.info("Continuing with existing local releases for processing...")
                 releases_to_process = list(local_ids)[:max_releases]
 
-                # For existing releases: Always generate new LaTeX labels
-                logger.process("Regenerating LaTeX labels for existing releases...")
-                logger.info(
-                    f"Will regenerate labels for {len(releases_to_process)} releases: {list(releases_to_process)[:3]}..."
-                )
-                with tqdm(
-                    total=len(releases_to_process),
-                    desc="Updating labels",
-                    unit="release",
-                ) as pbar:
-                    for release_id in releases_to_process:
-                        success = self.regenerate_latex_label(release_id)
-                        if success:
-                            logger.debug(f"✓ Label regenerated for {release_id}")
-                        else:
-                            logger.warning(
-                                f"✗ Failed to regenerate label for {release_id}"
-                            )
-                        pbar.update(1)
-                logger.success("Label regeneration completed!")
+                # Note: Label generation moved to separate generate_labels.py script
+                logger.info(f"Processing {len(releases_to_process)} existing releases")
+                logger.info("Run ./bin/generate-labels.sh to create PDF labels")
                 return  # Done - no further sync operations needed
             else:
                 # Only now load Discogs collection if really necessary
@@ -977,80 +957,11 @@ class DiscogsLibraryMirror:
         logger.success(f"✅ Release {release_id} synchronized successfully")
 
     def regenerate_latex_label(self, release_id):
-        """Regenerates only the LaTeX label for an existing release without sync operations"""
-        try:
-            logger.debug(f"Regenerating label for release ID: {release_id}")
-
-            # Find all matching release folders
-            matching_folders = []
-            for item in self.library_path.iterdir():
-                if item.is_dir() and item.name.startswith(f"{release_id}_"):
-                    matching_folders.append(item)
-
-            if not matching_folders:
-                logger.error(
-                    f"Release folder not found for ID: {release_id} in {self.library_path}"
-                )
-                return False
-
-            # Handle multiple folders - process ALL matching folders
-            if len(matching_folders) > 1:
-                folder_names = [f.name for f in matching_folders]
-                logger.warning(
-                    f"Multiple directories found for ID {release_id}: {folder_names}"
-                )
-                logger.info(
-                    f"Processing labels for all {len(matching_folders)} folders"
-                )
-
-            all_success = True
-            for release_folder in matching_folders:
-                logger.debug(f"Processing folder: {release_folder.name}")
-
-                # Load existing metadata
-                metadata_file = release_folder / "metadata.json"
-                if not metadata_file.exists():
-                    logger.error(
-                        f"No metadata.json found for release {release_id} at {metadata_file}"
-                    )
-                    all_success = False
-                    continue
-
-                logger.debug(f"Loading metadata from: {metadata_file}")
-                with open(metadata_file, "r", encoding="utf-8") as f:
-                    metadata = json.load(f)
-
-                # Create new LaTeX label (overwrites existing)
-                logger.debug(
-                    f"Creating LaTeX label for: {metadata.get('title', 'Unknown')}"
-                )
-                result = create_latex_label_file(str(release_folder), metadata)
-
-                if result:
-                    logger.debug(
-                        f"✓ Successfully regenerated LaTeX label for release {release_id} in {release_folder.name}"
-                    )
-                    # Check if file was really created
-                    label_file = release_folder / "label.tex"
-                    if label_file.exists():
-                        logger.debug(f"✓ label.tex file exists at: {label_file}")
-                    else:
-                        logger.warning(f"✗ label.tex file NOT found at: {label_file}")
-                        all_success = False
-                else:
-                    logger.warning(
-                        f"✗ create_latex_label_file returned False for {release_id} in {release_folder.name}"
-                    )
-                    all_success = False
-
-            return all_success
-
-        except Exception as e:
-            logger.error(f"Error regenerating LaTeX label for {release_id}: {e}")
-            import traceback
-
-            logger.error(traceback.format_exc())
-            return False
+        """DEPRECATED: LaTeX label generation removed. Use generate_labels.py with ReportLab instead."""
+        logger.warning(
+            f"regenerate_latex_label() is deprecated. Use './bin/generate-labels.sh' to create PDF labels."
+        )
+        return True
 
         # yt_searcher.search_release_tracks(release_id, metaData, self.release_folder )
 
@@ -1059,14 +970,16 @@ class DiscogsLibraryMirror:
     def regenerate_existing_files(
         self, regenerate_labels=False, regenerate_waveforms=False, max_releases=None
     ):
-        """Regenerates LaTeX labels and/or waveforms for existing releases"""
+        """Regenerates waveforms for existing releases. Label generation moved to generate_labels.py"""
 
-        # For label regeneration, use all releases with metadata.json (not just complete ones)
-        if regenerate_labels and not regenerate_waveforms:
-            local_ids = set(self.get_all_local_release_ids())
-        else:
-            # For waveforms or combined regeneration, use only complete releases
-            local_ids = set(self.get_local_release_ids())
+        if regenerate_labels:
+            logger.warning(
+                "Label regeneration deprecated. Use './bin/generate-labels.sh' instead."
+            )
+            regenerate_labels = False
+
+        # Use only complete releases for waveform regeneration
+        local_ids = set(self.get_local_release_ids())
 
         if not local_ids:
             logger.warning("No local releases found for regeneration")
@@ -1101,8 +1014,8 @@ class DiscogsLibraryMirror:
                 success_labels = True
                 success_waveforms = True
 
-                if regenerate_labels:
-                    success_labels = self.regenerate_latex_label(release_id)
+                # Label regeneration removed - use generate_labels.py
+                success_labels = True
 
                 if regenerate_waveforms:
                     success_waveforms = self.regenerate_waveforms(release_id)
@@ -1188,7 +1101,7 @@ class DiscogsLibraryMirror:
                     # 2. QR code generation (both simple and fancy)
                     generate_qr_code_advanced(self.release_folder, release_id, metadata)
 
-                    # Note: LaTeX label creation removed - use generate_labels.py with ReportLab instead
+                    # Note: Label creation moved to generate_labels.py (uses ReportLab)
 
                 except Exception as e:
                     logger.error(f"Error processing release {release_id} offline: {e}")
@@ -1340,10 +1253,7 @@ class DiscogsLibraryMirror:
             logger.error(traceback.format_exc())
             return False
 
-        # create LaTeX snippet?
-        # - qr code
-
-        # out of loop, create LaTeX full sheet
+        # Note: Label generation moved to generate_labels.py
 
         return
 
@@ -1453,9 +1363,8 @@ class DiscogsLibraryMirror:
             # Process audio analysis
             self._process_audio_analysis_offline(metadata)
 
-            # Generate LaTeX label and QR code
-            self._generate_latex_label(metadata)
-            self._generate_qr_code(metadata)
+            # Generate QR code only (labels generated via generate_labels.py)
+            generate_qr_code_advanced(self.release_folder, release_id, metadata)
 
             logger.success(f"✅ Completed offline processing for release {release_id}")
             return True
