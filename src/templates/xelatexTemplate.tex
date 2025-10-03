@@ -14,9 +14,10 @@
 \setotherlanguage{chinese}
 
 % Font configuration for Unicode support
-\setmainfont{FreeSerif}
-\setsansfont{FreeSans}
-\setmonofont{FreeMono}
+% Using Liberation Sans (Helvetica alternative) for all text
+\setmainfont{Liberation Sans}
+\setsansfont{Liberation Sans}
+\setmonofont{Liberation Mono}
 
 % Multilingual font configuration
 \newfontfamily\arabicfont[Script=Arabic]{DejaVu Sans}
@@ -60,16 +61,12 @@
 
 % Package
 \usepackage{tikz}
-\usepackage{nicefrac}
 \usepackage{tabularx}
-\usepackage{tabulary}
 \usepackage[document]{ragged2e}
-\usepackage{booktabs}
-\usepackage{array, makecell}%
+\usepackage{array}
 \usepackage{amssymb}% Für musikalische Symbole (\sharp, \flat, \natural)
 \usepackage{hyperref}% Für Hyperlinks zu Discogs
 \usepackage{graphicx}% For \includegraphics and \resizebox
-\usepackage{adjustbox}% For adjustbox environment
 \usetikzlibrary{calc}
 
 
