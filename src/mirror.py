@@ -46,8 +46,11 @@ class DiscogsLibraryMirror:
             raise ValueError("Discogs token missing in config.")
         return discogs_client.Client("DiscogsDBLabelGen/0.1", user_token=token)
 
-    def find_bandcamp_release(self, metadata):
+    def find_bandcamp_release(self, metadata, tracker=None):
         """Find matching Bandcamp release using catalog numbers, artist, and title"""
+        if tracker:
+            tracker.update_step("Searching Bandcamp library", 36)
+
         bandcamp_path = self.config.get("BANDCAMP_PATH")
         if not bandcamp_path:
             logger.debug("No BANDCAMP_PATH configured")
@@ -129,8 +132,11 @@ class DiscogsLibraryMirror:
         )
         return audio_files
 
-    def copy_bandcamp_audio_to_release_folder(self, bandcamp_folder, metadata):
+    def copy_bandcamp_audio_to_release_folder(self, bandcamp_folder, metadata, tracker=None):
         """Copy Bandcamp audio files to release folder with proper naming"""
+        if tracker:
+            tracker.update_step("Preparing Bandcamp files", 41)
+
         audio_files = self.get_bandcamp_audio_files(bandcamp_folder)
         if not audio_files:
             return False
@@ -146,7 +152,12 @@ class DiscogsLibraryMirror:
 
         # Create simple mapping: assume audio files are in track order
         copied_count = 0
+        total_files = min(len(audio_files), len(tracklist))
+
         for i, audio_file in enumerate(audio_files):
+            if tracker and total_files > 0:
+                progress = 42 + (i / total_files) * 8  # 42-50% range
+                tracker.update_step(f"Copying Bandcamp file {i + 1}/{total_files}", progress)
             if i >= len(tracklist):
                 logger.warning(
                     f"More audio files than tracks in tracklist, stopping at {i}"
@@ -177,7 +188,7 @@ class DiscogsLibraryMirror:
         logger.success(f"Successfully copied {copied_count} Bandcamp audio files")
         return copied_count > 0
 
-    def analyze_bandcamp_audio(self, metadata, download_only=False):
+    def analyze_bandcamp_audio(self, metadata, download_only=False, tracker=None):
         """Analyze Bandcamp audio files if analysis is enabled"""
         if download_only:
             return
@@ -185,7 +196,14 @@ class DiscogsLibraryMirror:
         # Import audio analyzer
         from analyzeSoundFile import analyzeAudioFileOrStream
 
-        for track in metadata.get("tracklist", []):
+        tracklist = metadata.get("tracklist", [])
+        total_tracks = len(tracklist)
+
+        for track_idx, track in enumerate(tracklist):
+            if tracker and total_tracks > 0:
+                progress = 70 + (track_idx / total_tracks) * 15  # 70-85% range
+                tracker.update_step(f"Analyzing Bandcamp track {track_idx + 1}/{total_tracks}", progress)
+</parameter>
             track_position = track.get("position", "")
             if not track_position:
                 continue
@@ -263,10 +281,13 @@ class DiscogsLibraryMirror:
         page = 1  # start page?
 
         while True:
+            logger.info(f"Fetching page {page} from Discogs API...")
             releases = folder.releases.page(page)  # Get releases of current page
-            # print(len(folder.releases.page(page)))
+
             for release in releases:
                 release_ids.append(release.release.id)
+
+            logger.info(f"Downloaded {len(release_ids)} release IDs so far...")
 
             # If current page has fewer than per_page releases, we might be done
             if len(releases) < 50:  # change to 50 later for entire library
@@ -275,6 +296,7 @@ class DiscogsLibraryMirror:
             page += 1
             time.sleep(1)  # Wait for Discogs API rate limit
 
+        logger.success(f"Loaded {len(release_ids)} release IDs from Discogs collection")
         return release_ids
 
     def clean_string_for_filename(self, name, replace_with="_"):
@@ -844,9 +866,7 @@ class DiscogsLibraryMirror:
         if tracker:
             tracker.add_file(str(self.release_folder / "metadata.json"))
         # save coverart
-        if tracker:
-            tracker.update_step("Downloading cover art", 30)
-        self.save_cover_art(release_id, metadata)
+        self.save_cover_art(release_id, metadata, tracker)
         if tracker:
             cover_files = list(self.release_folder.glob("cover.*"))
             if cover_files:
@@ -864,14 +884,14 @@ class DiscogsLibraryMirror:
         # Check for Bandcamp high-quality audio first
         if tracker:
             tracker.update_step("Checking for Bandcamp audio", 35)
-        bandcamp_folder = self.find_bandcamp_release(metadata)
+        bandcamp_folder = self.find_bandcamp_release(metadata, tracker)
         used_bandcamp = False
 
         if bandcamp_folder:
             if tracker:
                 tracker.update_step("Copying Bandcamp audio", 40)
             logger.info(f"🎵 Found Bandcamp release: {bandcamp_folder}")
-            if self.copy_bandcamp_audio_to_release_folder(bandcamp_folder, metadata):
+            if self.copy_bandcamp_audio_to_release_folder(bandcamp_folder, metadata, tracker):
                 logger.success(f"✅ Using high-quality Bandcamp audio for {release_id}")
                 used_bandcamp = True
 
@@ -886,7 +906,7 @@ class DiscogsLibraryMirror:
                     if tracker:
                         tracker.update_step("Analyzing Bandcamp audio", 70)
                     # Analyze Bandcamp audio files
-                    self.analyze_bandcamp_audio(metadata, download_only=False)
+                    self.analyze_bandcamp_audio(metadata, download_only=False, tracker=tracker)
             else:
                 logger.warning(
                     "⚠️ Failed to copy Bandcamp audio, falling back to YouTube"
@@ -898,7 +918,7 @@ class DiscogsLibraryMirror:
                 tracker.update_step("Searching YouTube", 45)
             logger.info(f"🎬 Using YouTube audio for {release_id}")
             yt_searcher = youtube_handler.YouTubeMatcher(
-                self.release_folder, False
+                self.release_folder, False, tracker
             )  # initialize yt_module
             yt_searcher.match_discogs_release_youtube(
                 metadata
@@ -934,7 +954,7 @@ class DiscogsLibraryMirror:
             if tracker:
                 tracker.update_step("Generating QR code", 85)
             # create qr code with cover background
-            generate_qr_code_advanced(self.release_folder, release_id, metadata)
+            generate_qr_code_advanced(self.release_folder, release_id, metadata, tracker)
             if tracker:
                 qr_files = list(self.release_folder.glob("*qr*.png"))
                 if qr_files:
@@ -943,7 +963,7 @@ class DiscogsLibraryMirror:
             if tracker:
                 tracker.update_step("Creating LaTeX label", 95)
             # create latex labels
-            create_latex_label_file(self.release_folder, metadata)
+            create_latex_label_file(self.release_folder, metadata, tracker)
             if tracker:
                 tracker.add_file(str(self.release_folder / "label.tex"))
 
@@ -1319,7 +1339,7 @@ class DiscogsLibraryMirror:
 
         return
 
-    def save_cover_art(self, release_id, metadata):
+    def save_cover_art(self, release_id, metadata, tracker=None):
         """Downloads all available cover images for a release"""
 
         # Check if primary cover already exists - if so, skip API call entirely
@@ -1329,6 +1349,9 @@ class DiscogsLibraryMirror:
                 f"Primary cover already exists for release {release_id}, skipping Discogs API call"
             )
             return
+
+        if tracker:
+            tracker.update_step("Fetching cover art metadata", 28)
 
         try:
             release = self.discogs.release(release_id)
@@ -1345,6 +1368,10 @@ class DiscogsLibraryMirror:
         # Download all images with proper naming
         for i, image in enumerate(images):
             try:
+                if tracker:
+                    progress = 30 + (i / len(images)) * 5  # 30-35% range for cover downloads
+                    tracker.update_step(f"Downloading cover art {i + 1}/{len(images)}", progress)
+
                 image_url = image["uri"]
 
                 # First image keeps original name, others get indexed
@@ -1377,6 +1404,7 @@ class DiscogsLibraryMirror:
                 logger.success(f"Downloaded: {filename}")
 
             except Exception as e:
+</parameter>
                 logger.warning(f"Failed to download image {i + 1}: {e}")
                 continue
 

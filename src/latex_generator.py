@@ -392,8 +392,11 @@ def inplace_change(filename, old_string, new_string):
         f.write(s)
 
 
-def create_latex_label_file(release_folder, metadata):
+def create_latex_label_file(release_folder, metadata, tracker=None):
     """Creates a LaTeX label file for a release (original design)"""
+
+    if tracker:
+        tracker.update_step("Creating LaTeX label", 95)
 
     label_file = os.path.join(release_folder, "label.tex")
 
@@ -402,7 +405,12 @@ def create_latex_label_file(release_folder, metadata):
     #     logger.info(f"LaTeX label already exists: {os.path.basename(label_file)}")
     #     return True
 
-    return _create_label_original(release_folder, metadata, label_file)
+    result = _create_label_original(release_folder, metadata, label_file)
+
+    if tracker:
+        tracker.update_step("Label complete", 100)
+
+    return result
 
 
 def _create_label_original(release_folder, metadata, label_file):

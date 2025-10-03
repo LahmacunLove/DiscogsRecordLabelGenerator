@@ -113,9 +113,12 @@ def _analyze_track_standalone(task):
 
 
 class YouTubeMatcher:
-    def __init__(self, release_folder, debug):
+    def __init__(self, release_folder, debug, tracker=None):
         self.release_folder = release_folder
         self.debug = debug
+        self.tracker = tracker
+        self.current_track_index = 0
+        self.total_tracks = 0
         self.ytdl_opts = {
             "quiet": True,
             "skip_download": True,
@@ -193,6 +196,9 @@ class YouTubeMatcher:
             return None
 
     def match_discogs_release_youtube(self, discogs_metadata):
+        if self.tracker:
+            self.tracker.update_step("Checking YouTube matches cache", 46)
+
         if (
             os.path.isfile(os.path.join(self.release_folder, "yt_matches.json"))
             and self.debug == False
@@ -204,8 +210,14 @@ class YouTubeMatcher:
             ) as f:
                 self.matches = json.load(f)
         else:
+            if self.tracker:
+                self.tracker.update_step("Fetching YouTube metadata", 47)
+
             video_urls = discogs_metadata["videos"]
             youtube_metadata = self.fetch_release_YTmetadata(video_urls)
+
+            if self.tracker:
+                self.tracker.update_step("Matching tracks with YouTube", 50)
 
             self.matches = []
 
@@ -414,8 +426,30 @@ class YouTubeMatcher:
     def audio_download_analyze(self, release_metadata):
         """Downloads audio for matched tracks and performs analysis"""
 
+        # Progress hook for yt-dlp
+        def progress_hook(d):
+            if self.tracker and d["status"] == "downloading":
+                try:
+                    downloaded = d.get("downloaded_bytes", 0)
+                    total = d.get("total_bytes") or d.get("total_bytes_estimate", 0)
+                    if total > 0:
+                        percent = (downloaded / total) * 100
+                        track_progress = (
+                            self.current_track_index / max(self.total_tracks, 1) * 100
+                        )
+                        overall_progress = 60 + (
+                            track_progress * 0.1
+                        )  # 60-70% range for download
+                        self.tracker.update_step(
+                            f"Downloading track {self.current_track_index + 1}/{self.total_tracks} ({percent:.0f}%)",
+                            overall_progress,
+                        )
+                except:
+                    pass
+
         ytdl_opts = {
-            "quiet": False,  # Enable output for debugging
+            "quiet": True,  # Suppress yt-dlp output
+            "no_warnings": True,
             "skip_download": False,
             "nocheckcertificate": True,
             "format": "bestaudio/best",
@@ -430,12 +464,19 @@ class YouTubeMatcher:
                 }
             ],
             "ignoreerrors": True,  # Continue on errors
+            "progress_hooks": [progress_hook],
         }
 
         # Download phase - separate from analysis
         downloaded_tracks = []
 
+        # Set total tracks for progress tracking
+        self.total_tracks = len(
+            [m for m in self.matches if m["youtube_match"] is not None]
+        )
+
         for i, match in enumerate(self.matches):
+            self.current_track_index = i
             if match["youtube_match"] is None:
                 logger.warning(
                     f"No YouTube match for track {match.get('track_position', i)}"
@@ -506,8 +547,28 @@ class YouTubeMatcher:
     def audio_download_only(self, release_metadata):
         """Downloads audio for matched tracks without analysis (download-only mode)"""
 
+        # Progress hook for yt-dlp
+        def progress_hook(d):
+            if self.tracker and d["status"] == "downloading":
+                try:
+                    downloaded = d.get("downloaded_bytes", 0)
+                    total = d.get("total_bytes") or d.get("total_bytes_estimate", 0)
+                    if total > 0:
+                        percent = (downloaded / total) * 100
+                        track_progress = (
+                            self.current_track_index / max(self.total_tracks, 1) * 100
+                        )
+                        overall_progress = 60 + (track_progress * 0.25)  # 60-85% range
+                        self.tracker.update_step(
+                            f"Downloading track {self.current_track_index + 1}/{self.total_tracks} ({percent:.0f}%)",
+                            overall_progress,
+                        )
+                except:
+                    pass
+
         ytdl_opts = {
-            "quiet": False,  # Enable output for debugging
+            "quiet": True,  # Suppress yt-dlp output
+            "no_warnings": True,
             "skip_download": False,
             "nocheckcertificate": True,
             "format": "bestaudio/best",
@@ -522,13 +583,20 @@ class YouTubeMatcher:
                 }
             ],
             "ignoreerrors": True,  # Continue on errors
+            "progress_hooks": [progress_hook],
         }
 
         # Download phase - without analysis
         downloaded_tracks = []
         release_folder_name = os.path.basename(self.release_folder)
 
+        # Set total tracks for progress tracking
+        self.total_tracks = len(
+            [m for m in self.matches if m["youtube_match"] is not None]
+        )
+
         for i, match in enumerate(self.matches):
+            self.current_track_index = i
             if match["youtube_match"] is None:
                 logger.warning(
                     f"[{release_folder_name}] No YouTube match for track {match.get('track_position', i)}"
