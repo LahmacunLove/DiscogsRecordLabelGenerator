@@ -130,12 +130,12 @@ def draw_label(c, x, y, metadata, release_folder, font_family):
     c.setFont(font_family, 8)
     c.drawString(text_x, text_y, artist)
 
-    c.setFont(f"{font_family}-Bold", 8)
+    c.setFont(f"{font_family}-Bold", 10)
     text_y -= 3.5 * mm
     c.drawString(text_x, text_y, title)
 
     # Track table section
-    table_y = text_y - 4 * mm
+    table_y = text_y - 6 * mm
 
     # Table headers (very small)
     c.setFont(font_family, 5)
@@ -204,7 +204,7 @@ def draw_label(c, x, y, metadata, release_folder, font_family):
     qr_path = Path(release_folder) / "qrcode.png"
     if qr_path.exists():
         try:
-            qr_size = 4 * mm  # Reduced to 1/3 of original size (12mm / 3 = 4mm)
+            qr_size = 6 * mm  # Increased slightly for better scannability
             c.drawImage(
                 str(qr_path),
                 x + LABEL_WIDTH - qr_size - padding,
