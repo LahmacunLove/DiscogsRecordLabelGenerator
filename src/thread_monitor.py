@@ -15,7 +15,8 @@ Provides real-time visualization of parallel worker threads with:
 import sys
 import time
 import threading
-from collections import defaultdict
+import logging
+from collections import defaultdict, deque
 from datetime import datetime
 from rich.console import Console
 from rich.live import Live
@@ -109,6 +110,10 @@ class ThreadMonitor:
         self.error_count = 0
         self.start_time = time.time()
 
+        # Log buffer for capturing messages (last 6 messages)
+        self.log_buffer = deque(maxlen=6)
+        self.log_handler = None
+
         # Shutdown handling
         self.shutdown_requested = False
         self.shutdown_event = threading.Event()
@@ -140,14 +145,69 @@ class ThreadMonitor:
                 elif kwargs.get("status") == "error":
                     self.error_count += 1
 
+    def add_log_message(self, message):
+        """Add a log message to the buffer"""
+        with self.lock:
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            self.log_buffer.append(f"[dim]{timestamp}[/dim] {message}")
+
+    def install_log_handler(self):
+        """Install a custom log handler to capture messages"""
+        from logger import logger as discogs_logger
+
+        class BufferHandler(logging.Handler):
+            def __init__(self, monitor):
+                super().__init__()
+                self.monitor = monitor
+
+            def emit(self, record):
+                try:
+                    msg = self.format(record)
+                    # Strip the "LEVEL │ " prefix if present
+                    if " │ " in msg:
+                        msg = msg.split(" │ ", 1)[1]
+                    self.monitor.add_log_message(msg)
+                except Exception:
+                    pass
+
+        self.log_handler = BufferHandler(self)
+        self.log_handler.setLevel(logging.INFO)
+
+        # Add to the discogs logger
+        discogs_logger.logger.addHandler(self.log_handler)
+
+        # Suppress console output by removing console handler temporarily
+        self.original_handlers = []
+        for handler in discogs_logger.logger.handlers[:]:
+            if (
+                isinstance(handler, logging.StreamHandler)
+                and handler.stream == sys.stdout
+            ):
+                self.original_handlers.append(handler)
+                discogs_logger.logger.removeHandler(handler)
+
+    def remove_log_handler(self):
+        """Remove the custom log handler and restore original handlers"""
+        from logger import logger as discogs_logger
+
+        if self.log_handler:
+            discogs_logger.logger.removeHandler(self.log_handler)
+            self.log_handler = None
+
+        # Restore original console handlers
+        for handler in self.original_handlers:
+            discogs_logger.logger.addHandler(handler)
+        self.original_handlers = []
+
     def _build_display(self):
         """Build the display layout"""
         layout = Layout()
 
-        # Header with overall progress
+        # Header with overall progress, workers, logs, and footer
         layout.split_column(
             Layout(name="header", size=5),
             Layout(name="workers", ratio=1),
+            Layout(name="logs", size=10),
             Layout(name="footer", size=3),
         )
 
@@ -202,6 +262,19 @@ class ThreadMonitor:
                 worker_table.add_row(*row_panels)
 
         layout["workers"].update(worker_table)
+
+        # Log panel with recent messages
+        with self.lock:
+            log_text = Text()
+            if self.log_buffer:
+                log_text.append("📋 Recent Activity:\n", style="bold cyan")
+                for log_msg in self.log_buffer:
+                    log_text.append(log_msg + "\n")
+            else:
+                log_text.append("📋 Recent Activity:\n", style="bold cyan")
+                log_text.append("Waiting for activity...", style="dim")
+
+        layout["logs"].update(Panel(log_text, border_style="blue"))
 
         # Footer with instructions
         footer_text = Text()
