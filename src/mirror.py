@@ -547,9 +547,11 @@ class DiscogsLibraryMirror:
             logger.debug(f"Using {optimal_workers} workers for release processing")
 
         # Use ThreadPoolExecutor for Discogs-only mode due to rate limits
+        # Also use ThreadPoolExecutor in console mode (no callback) because ThreadMonitor requires shared memory
+        use_threads = discogs_only or (progress_callback is None)
         executor_class = (
             concurrent.futures.ThreadPoolExecutor
-            if discogs_only
+            if use_threads
             else concurrent.futures.ProcessPoolExecutor
         )
 
