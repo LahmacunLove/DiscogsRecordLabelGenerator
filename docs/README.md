@@ -1,86 +1,48 @@
 # Documentation
 
-This directory contains comprehensive documentation for DiscogsRecordLabelGenerator.
+This directory contains project documentation, development notes, and assets.
 
-## User Documentation
+## Contents
 
-Essential guides for using the application:
+### Documentation Files
 
-- **[INSTALLATION.md](INSTALLATION.md)** - Platform-specific installation instructions
-- **[CONFIGURATION.md](CONFIGURATION.md)** - Configuration guide and setup options
-- **[USAGE.md](USAGE.md)** - Detailed command reference and usage examples
-- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Common issues and solutions
-- **[FILE_STRUCTURE.md](FILE_STRUCTURE.md)** - Project and output directory structure
+- **[DEPENDENCY_NOTES.md](DEPENDENCY_NOTES.md)** - Detailed explanation of the `six` dependency issue and how it was resolved by upgrading to `python3-discogs-client`
+- **[PR_SYNC_CLI.md](PR_SYNC_CLI.md)** - Pull request documentation for the CLI sync tool that replaced the GUI
 
-## Quick Links
+### Assets
 
-- **[Main README](../README.md)** - Quick start and project overview
-- **[Requirements](../requirements.txt)** - Python dependencies
-- **[Shell Scripts](../bin/)** - Wrapper scripts for easy execution
+The `assets/` directory contains images and sample outputs:
 
-## Developer Documentation
+- **sample.png** - Example of generated vinyl label (shown in main README)
+- **sample2.png** - Another label example (shown in main README)
+- **sample.jpg** - Additional label sample
+- **output.jpg** - Sample output artifact
 
-Technical documentation and development notes:
+## For Users
 
-- **[DEPENDENCY_NOTES.md](DEPENDENCY_NOTES.md)** - Dependency resolution and migration notes
-- **[PR_SYNC_CLI.md](PR_SYNC_CLI.md)** - CLI sync tool PR documentation
-- **[QA.md](QA.md)** - Code behavior Q&A and implementation details
+If you're looking for user-facing documentation, please see:
+
+- **[Main README](../README.md)** - Setup instructions, usage guide, and feature overview
+- **[bin/README.md](../bin/README.md)** - Shell scripts documentation and usage examples
 - **[Copilot Instructions](../.github/copilot-instructions.md)** - Development guidelines and testing workflows
 
-## Assets
+## For Developers
 
-Sample outputs and images:
+The documentation in this directory is primarily for:
 
-- **[assets/sample.png](assets/sample.png)** - Primary label example
-- **[assets/sample2.png](assets/sample2.png)** - Secondary label example
-
-## Documentation Overview
-
-### For New Users
-
-1. Start with [INSTALLATION.md](INSTALLATION.md) to set up your system
-2. Follow [CONFIGURATION.md](CONFIGURATION.md) to configure the application
-3. Use [USAGE.md](USAGE.md) to learn the commands
-4. Refer to [TROUBLESHOOTING.md](TROUBLESHOOTING.md) if you encounter issues
-
-### For Existing Users
-
-- **Upgrading?** Check [DEPENDENCY_NOTES.md](DEPENDENCY_NOTES.md) for migration info
-- **Commands?** See [USAGE.md](USAGE.md) for full reference
-- **Errors?** Check [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
-- **File locations?** See [FILE_STRUCTURE.md](FILE_STRUCTURE.md)
-
-### For Developers
-
-- Review [Copilot Instructions](../.github/copilot-instructions.md) before contributing
-- Check [DEPENDENCY_NOTES.md](DEPENDENCY_NOTES.md) for dependency context
-- See [PR_SYNC_CLI.md](PR_SYNC_CLI.md) for CLI migration details
-- Browse [QA.md](QA.md) for code behavior and implementation Q&A
-
-## Contributing
-
-When contributing to documentation:
-
-1. Keep user docs (INSTALLATION, USAGE, etc.) beginner-friendly
-2. Put technical details in developer docs (DEPENDENCY_NOTES, etc.)
-3. Update this README when adding new documentation
-4. Use clear examples and avoid jargon where possible
-5. Test all commands before documenting them
+- Understanding the technical decisions made during development
+- Reviewing pull request rationale and migration guides
+- Learning about dependency management and project history
+- Contributing to the project with context about past changes
 
 ## Structure
 
 ```
 docs/
-├── README.md                 # This file - documentation index
-├── INSTALLATION.md           # Installation guide (all platforms)
-├── CONFIGURATION.md          # Configuration reference
-├── USAGE.md                  # Complete usage guide
-├── TROUBLESHOOTING.md        # Common problems and solutions
-├── FILE_STRUCTURE.md         # Directory structure documentation
-├── DEPENDENCY_NOTES.md       # Technical dependency notes
+├── README.md                 # This file
+├── DEPENDENCY_NOTES.md       # Technical notes on dependency resolution
 ├── PR_SYNC_CLI.md           # CLI tool PR documentation
-├── QA.md                     # Code behavior Q&A
-└── assets/                   # Images and samples
+└── assets/                   # Images, screenshots, and samples
     ├── sample.png
     ├── sample2.png
     ├── sample.jpg

@@ -4,9 +4,9 @@ A Python application that syncs your Discogs collection, analyzes tracks, and ge
 
 ### Preview
 
-![Label Sample 1](sample.png)
+![Label Sample 1](docs/assets/sample.png)
 
-![Label Sample 2](sample2.png)
+![Label Sample 2](docs/assets/sample2.png)
 
 ## What it does
 
