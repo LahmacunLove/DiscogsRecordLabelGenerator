@@ -70,6 +70,64 @@ This document contains questions and answers about the codebase behavior and imp
 
 **Implementation:** Uses `ThreadMonitor` class in `src/thread_monitor.py`, integrated in `src/mirror.py`. See [detailed implementation notes](../.assistant/QA_DETAILED.md) for technical details.
 
+### Q: How does Ctrl+C work during sync operations?
+
+**Asked:** 2025-01-XX
+
+**Question:** When I press Ctrl+C during sync, does it stop immediately or wait for workers to finish their current tasks?
+
+**Answer:** 
+
+The sync process implements **immediate termination** that responds to Ctrl+C by forcefully exiting the entire process, terminating all worker threads/processes instantly.
+
+**How it works:**
+
+1. **Signal Handler Setup** (`src/thread_monitor.py`, line 135):
+   - `ThreadMonitor.__init__()` registers a SIGINT handler
+   - When Ctrl+C is pressed, `_signal_handler()` immediately calls `sys.exit(130)`
+
+2. **Immediate Process Exit**:
+   - All worker threads are terminated immediately (Python kills threads on process exit)
+   - No cleanup, no checkpoints, no waiting for operations to complete
+   - Process exits with status code 130 (standard for SIGINT)
+
+**Behavior:**
+
+- **Instant termination**: Process exits immediately when Ctrl+C is pressed
+- **All workers killed**: No waiting for any operations to complete
+- **Warning message**: UI shows "⚠️ Ctrl+C detected - terminating immediately..." before exit
+- **Potential partial files**: Any files being written may be incomplete or corrupted
+- **No cleanup**: Temporary files may be left behind
+
+**Trade-offs:**
+
+✅ **Advantages:**
+- Immediate response to user request
+- No waiting for long operations
+- Simple implementation
+
+⚠️ **Considerations:**
+- Files currently being written may be incomplete
+- Temporary files may not be cleaned up
+- Audio downloads may be partial
+- Next sync will need to reprocess interrupted releases
+
+**Relevant Files:**
+- `src/thread_monitor.py` (lines 137-143) - Signal handler with immediate exit
+- `scripts/sync.py` (lines 324-328) - Top-level KeyboardInterrupt handler
+
+**Testing:**
+```bash
+# Start a sync and press Ctrl+C during processing
+python3 scripts/sync.py --dev
+
+# Press Ctrl+C while workers are active
+# You should see: "⚠️ Ctrl+C detected - terminating immediately..."
+# Process exits instantly
+```
+
+**Related Topics:** Multi-threaded processing, signal handling, immediate termination, SIGINT handling
+
 ---
 
 ## Contributing to this Document

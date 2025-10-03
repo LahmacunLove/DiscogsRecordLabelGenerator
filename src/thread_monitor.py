@@ -135,12 +135,12 @@ class ThreadMonitor:
         signal.signal(signal.SIGINT, self._signal_handler)
 
     def _signal_handler(self, signum, frame):
-        """Handle Ctrl+C gracefully"""
+        """Handle Ctrl+C by immediately terminating all workers"""
         self.console.print(
-            "\n[bold yellow]⚠️  Ctrl+C detected - shutting down workers gracefully...[/]"
+            "\n[bold red]⚠️  Ctrl+C detected - terminating immediately...[/]"
         )
-        self.shutdown_requested = True
-        self.shutdown_event.set()
+        # Force immediate exit - all worker threads/processes will be terminated
+        sys.exit(130)  # Standard exit code for SIGINT
 
     def is_shutdown_requested(self):
         """Check if shutdown has been requested"""
