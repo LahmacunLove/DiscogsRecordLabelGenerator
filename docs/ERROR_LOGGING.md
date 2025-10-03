@@ -236,6 +236,46 @@ Using firefox cookies for YouTube authentication
 2. Verify installation: `ffmpeg -version`
 3. Ensure FFmpeg is in your PATH
 
+### 5. secretstorage/Keyring Errors (Chrome/Chromium on Linux)
+
+**Symptoms:**
+- `ModuleNotFoundError: No module named 'secretstorage'`
+- `Error accessing keyring`
+- `DBus error` when using Chrome/Chromium
+- Cookies extraction fails
+
+**Possible Causes:**
+- Chrome/Chromium stores cookies encrypted in system keyring
+- yt-dlp needs `secretstorage` to decrypt them
+- Missing system dependencies
+
+**Solutions:**
+1. Install secretstorage package:
+   ```bash
+   pip install secretstorage
+   ```
+
+2. If that fails, install system dependencies first:
+   ```bash
+   # Ubuntu/Debian
+   sudo apt-get install libsecret-1-dev python3-secretstorage
+   pip install secretstorage keyring
+   
+   # Fedora/RHEL
+   sudo dnf install libsecret-devel python3-secretstorage
+   pip install secretstorage keyring
+   ```
+
+3. **Easier alternative - Switch to Firefox:**
+   ```bash
+   # Edit config file
+   nano ~/.config/discogsDBLabelGen/discogs.env
+   
+   # Change to:
+   "YOUTUBE_COOKIES_BROWSER": "firefox"
+   ```
+   Firefox doesn't require secretstorage and is simpler to use on Linux.
+
 ## Viewing Error Logs
 
 ### View Latest Error Summary

@@ -102,6 +102,40 @@ If this works, your sync will work too.
 
 ## Troubleshooting
 
+### "secretstorage" errors (Chrome/Chromium on Linux)
+
+**Problem:** Error messages about `secretstorage`, `keyring`, or `DBus` when using Chrome/Chromium.
+
+**This happens because:** Chrome/Chromium stores cookies encrypted in the system keyring on Linux, and yt-dlp needs `secretstorage` to decrypt them.
+
+**Solution 1: Install secretstorage (Recommended)**
+```bash
+# Install Python package
+pip install secretstorage
+
+# If that doesn't work, install system dependencies first:
+# Ubuntu/Debian:
+sudo apt-get install libsecret-1-dev python3-secretstorage
+pip install secretstorage keyring
+
+# Fedora/RHEL:
+sudo dnf install libsecret-devel python3-secretstorage
+pip install secretstorage keyring
+```
+
+**Solution 2: Switch to Firefox (Easier)**
+
+Firefox doesn't need `secretstorage`:
+```bash
+# Edit config file
+nano ~/.config/discogsDBLabelGen/discogs.env
+
+# Change to:
+"YOUTUBE_COOKIES_BROWSER": "firefox"
+```
+
+Make sure you're signed into YouTube in Firefox, then run sync again.
+
 ### "Cookies not found" error
 
 **Problem:** yt-dlp can't find your browser's cookies.
@@ -337,7 +371,10 @@ Yes, at any time:
 **A:** Yes, you must be signed into YouTube in the browser you specified.
 
 ### Q: Which browser should I use?
-**A:** Firefox and Chrome work best. Use whichever you normally use for YouTube.
+**A:** Firefox and Chrome work best. **Firefox is recommended on Linux** because it doesn't require `secretstorage`. Use whichever you normally use for YouTube.
+
+### Q: What's the error about secretstorage?
+**A:** Chrome/Chromium on Linux need the `secretstorage` Python package to decrypt cookies. Either install it (`pip install secretstorage`) or switch to Firefox which doesn't need it.
 
 ### Q: Do I need YouTube Premium?
 **A:** No, a free YouTube account works fine.
