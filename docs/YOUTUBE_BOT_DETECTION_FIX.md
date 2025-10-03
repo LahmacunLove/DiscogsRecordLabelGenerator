@@ -8,6 +8,18 @@
 
 ## Quick Fix (5 minutes)
 
+### Option A: Use Setup Script (Easiest)
+
+If you're setting up for the first time or want to reconfigure:
+
+```bash
+./bin/setup.sh
+```
+
+The setup script will ask you about YouTube authentication and automatically configure browser cookies.
+
+### Option B: Manual Configuration
+
 ### Step 1: Update yt-dlp
 
 ```bash
@@ -201,6 +213,8 @@ Browser cookies are simpler and work better for this use case.
 ---
 
 ## Configuration File Examples
+
+**Note:** You can use `./bin/setup.sh` to configure these interactively instead of editing manually.
 
 ### Minimal configuration (just Discogs + cookies)
 ```json
