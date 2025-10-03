@@ -671,28 +671,32 @@ class DiscogsLibraryMirror:
                     # This ensures all threads have finished and updated their state
 
                 # Final update after executor context exits
-            time.sleep(0.1)  # Brief pause to ensure all state updates are visible
+                time.sleep(0.1)  # Brief pause to ensure all state updates are visible
 
-            # Build final display one more time to ensure 100% is shown
-            final_display = monitor._build_display()
-            console.print(final_display)
+                # Build final display one more time to ensure 100% is shown
+                final_display = monitor._build_display()
+                console.print(final_display)
 
-            # Print summary
-            if monitor.is_shutdown_requested():
-                console.print("\n[bold yellow]⚠️  Shutdown completed[/]")
-            else:
-                console.print(f"\n[bold green]✅ All releases processed![/]")
+                # Print summary
+                if monitor.is_shutdown_requested():
+                    console.print("\n[bold yellow]⚠️  Shutdown completed[/]")
+                else:
+                    console.print(f"\n[bold green]✅ All releases processed![/]")
 
-            console.print(
-                f"[bold]Completed:[/] {monitor.completed_count}/{monitor.total_releases}"
-            )
-            if monitor.error_count > 0:
-                console.print(f"[bold red]Errors:[/] {monitor.error_count}")
+                console.print(
+                    f"[bold]Completed:[/] {monitor.completed_count}/{monitor.total_releases}"
+                )
+                if monitor.error_count > 0:
+                    console.print(f"[bold red]Errors:[/] {monitor.error_count}")
 
-            # Clear message that sync phase is complete
-            console.print("\n[bold cyan]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/]")
-            console.print("[bold green]✅ Sync phase complete![/]")
-            console.print("[bold cyan]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/]\n")
+                # Clear message that sync phase is complete
+                console.print(
+                    "\n[bold cyan]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/]"
+                )
+                console.print("[bold green]✅ Sync phase complete![/]")
+                console.print(
+                    "[bold cyan]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/]\n"
+                )
 
             except KeyboardInterrupt:
                 monitor._signal_handler(None, None)
