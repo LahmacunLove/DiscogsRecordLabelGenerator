@@ -145,9 +145,6 @@ python3 sync.py --dev  # or just: python3 sync.py
 The new `sync.py` is actually better for scripting:
 
 ```bash
-# Old way (GUI couldn't be scripted)
-python3 main.py --dev
-
 # New way (more options)
 python3 sync.py --dev --labels
 python3 sync.py --labels-only --since 2024-01-01
@@ -164,7 +161,6 @@ python3 sync.py --dryrun
 
 ## Backward Compatibility
 
-- **`main.py`**: Still works exactly as before
 - **`setup.py`**: Still works for interactive configuration
 - **Configuration**: Same config file format and location
 - **`run.sh`**: Still works as before

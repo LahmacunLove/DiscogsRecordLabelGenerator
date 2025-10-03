@@ -10,12 +10,10 @@ DiscogsRecordLabelGenerator/
 │   ├── _common.sh               # Shared functions for scripts
 │   ├── setup.sh                 # Interactive configuration wizard
 │   ├── sync.sh                  # Sync and label generation wrapper
-│   ├── main.sh                  # Main processing wrapper
 │   └── generate-labels.sh       # Label generation wrapper
 ├── scripts/                      # Python entry points
 │   ├── setup.py                 # Setup script
 │   ├── sync.py                  # Sync CLI tool
-│   ├── main.py                  # Main processing script
 │   ├── generate_labels.py       # Label generation script
 │   ├── cleanup_duplicates.py    # Duplicate cleanup utility
 │   └── similarity_analyzer.py   # Audio similarity analyzer

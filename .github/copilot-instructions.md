@@ -20,7 +20,7 @@ Before committing any changes, you MUST:
 
 ### 1. Run Integrity Test
 ```bash
-python3 main.py --dryrun
+python3 sync.py --dryrun
 ```
 This command processes existing releases offline without making API calls or downloads. It verifies that:
 - All imports resolve correctly
@@ -115,7 +115,7 @@ When a user asks about code behavior or where functionality is implemented:
 ### Adding a New Python Dependency
 1. Add the import to your code
 2. Test locally: `pip install <package>`
-3. Run integrity test: `python3 main.py --dryrun`
+3. Run integrity test: `python3 sync.py --dryrun`
 4. Update both pip install commands in README.md:
    - Under "Requirements > Python Libraries"
    - Under "Setup > 1. Install Python Dependencies"
@@ -141,13 +141,13 @@ When a user asks about code behavior or where functionality is implemented:
 
 ### Minimal Testing (Quick Check)
 ```bash
-python3 main.py --dryrun
+python3 sync.py --dryrun
 ```
 
 ### Standard Testing (Recommended)
 ```bash
 # Test with limited scope
-python3 main.py --dev
+python3 sync.py --dev
 
 # Generate labels from test data
 python3 generate_labels.py --max 5
@@ -156,9 +156,8 @@ python3 generate_labels.py --max 5
 ### Full Testing (Before Major Changes)
 ```bash
 # Test all modes
-python3 main.py --dryrun
-python3 main.py --dev
 python3 sync.py --dryrun
+python3 sync.py --dev
 python3 sync.py --dev --labels
 python3 generate_labels.py --max 10
 ```
@@ -264,7 +263,7 @@ This convention makes it easy to:
 1. Create a descriptive branch name (e.g., `feature/add-spotify-integration`, `fix/unicode-labels`)
 2. Test thoroughly before pushing
 3. Update README.md with any user-facing changes
-4. Include "Tested with `python3 main.py --dryrun`" in PR description
+4. Include "Tested with `python3 sync.py --dryrun`" in PR description
 5. List all modified functionality
 6. Note any breaking changes
 
@@ -291,7 +290,7 @@ python3 -m json.tool ~/.config/discogsDBLabelGen/discogs.env
 ### Runtime Issues
 ```bash
 # Run with verbose logging
-python3 main.py --dryrun --verbose  # (if verbose flag exists)
+python3 sync.py --dryrun --verbose  # (if verbose flag exists)
 
 # Check system dependencies
 which ffmpeg
@@ -308,4 +307,4 @@ which gnuplot
 
 ---
 
-**Remember**: Always run `python3 main.py --dryrun` before committing changes!
+**Remember**: Always run `python3 sync.py --dryrun` before committing changes!

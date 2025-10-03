@@ -226,7 +226,7 @@ Example: `A1_waveform.png`, `B2_waveform.png`
 **Testing the Fix:**
 ```bash
 # Test on a specific release
-./bin/main.sh --release-id 116013
+./bin/sync.sh --release 116013
 
 # Check results
 ls ~/Music/DiscogsLibrary/116013_*/
@@ -252,7 +252,7 @@ If waveforms are not being generated:
 - `src/youtube_handler.py` (lines 15-90) - Standalone analysis function
 - `src/youtube_handler.py` (lines 497-650) - Parallel audio analysis orchestration
 - `src/waveform.gnuplot` - Gnuplot script template
-- `scripts/main.py` (lines 91-95, 151-187) - CLI argument handling for `--regenerate-waveforms`
+- `scripts/sync.py` - CLI tool for syncing and processing releases
 
 **Related Topics:** Audio analysis workflow, Opus codec handling, FFmpeg integration, dependency validation, error handling, asset storage structure
 

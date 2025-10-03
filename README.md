@@ -93,9 +93,6 @@ Progress: 15/50 (30.0%) │ Errors: 1 │ Workers: 4 │ Time: 5m 23s
 # Sync your collection
 ./bin/sync.sh [--dev|--dryrun] [--labels] [--max N]
 
-# Process existing releases
-./bin/main.sh [--dev|--dryrun] [--download-only] [--max N]
-
 # Generate labels only
 ./bin/generate-labels.sh [--max N] [--output DIR]
 

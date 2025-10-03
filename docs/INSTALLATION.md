@@ -197,7 +197,7 @@ The `bin/` scripts automatically activate the virtual environment:
 
 ```bash
 ./bin/sync.sh --dev        # venv activated automatically
-./bin/main.sh --help       # venv activated automatically
+./bin/sync.sh --help       # see all options
 ```
 
 ## Python Dependencies
