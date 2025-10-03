@@ -21,7 +21,7 @@ A Python application that syncs your Discogs collection, analyzes tracks, and ge
 
 ### Step 1: Setup (First Time Only)
 ```bash
-python3 setup.py
+./bin/setup.sh
 ```
 This interactive script will guide you through:
 - Getting your Discogs API token
@@ -86,13 +86,13 @@ Configuration complete! Here's what to do next:
    pip install -r requirements.txt
 
 2. Run the application:
-   ./run.sh --dev          # Test with first 10 releases
-   ./run.sh                # Full collection sync
-   python3 sync.py --help  # See all CLI options
+   ./bin/sync.sh --dev     # Test with first 10 releases
+   ./bin/sync.sh           # Full collection sync
+   ./bin/sync.sh --help    # See all CLI options
 
 3. For help:
-   ./run.sh --help
-   python3 sync.py --help
+   ./bin/sync.sh --help
+   ./bin/main.sh --help
 
 ============================================================
   Setup completed successfully! 🎉
@@ -104,16 +104,16 @@ Configuration complete! Here's what to do next:
 
 **Option A: Quick Sync (Command Line)**
 ```bash
-./run.sh --dev  # Process first 10 releases (automatically uses virtual environment)
+./bin/sync.sh --dev  # Process first 10 releases (automatically uses virtual environment)
 ```
 
 **Option B: Advanced Sync (CLI Tool)**
 ```bash
-python3 sync.py --dev --labels  # Dev mode with label generation
-python3 sync.py --help          # See all options
+./bin/sync.sh --dev --labels  # Dev mode with label generation
+./bin/sync.sh --help          # See all options
 ```
 
-> **Note**: The `run.sh` convenience script automatically activates the virtual environment for you. If you prefer to manually activate it, use: `source venv/bin/activate`
+> **Note**: The shell scripts in `bin/` automatically activate the virtual environment for you. If you prefer to manually activate it, use: `source venv/bin/activate`
 </parameter>
 
 <old_text line=151>
@@ -154,7 +154,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-> **Note**: The `run.sh` convenience script automatically handles the virtual environment for you after this initial setup.
+> **Note**: The shell scripts in `bin/` automatically handle the virtual environment for you after this initial setup.
 
 > **Note for Python 3.13+**: Due to PEP 668, using a virtual environment is strongly recommended to avoid conflicts with system packages.
 
@@ -196,7 +196,7 @@ The application requires two configuration values:
 
 **Option A: Interactive Setup (Easiest)** ⭐
 ```bash
-python3 setup.py
+./bin/setup.sh
 ```
 This interactive script will:
 - Guide you step-by-step to get your Discogs API token
@@ -209,7 +209,7 @@ See the expandable example above for what the setup process looks like.
 
 **Option B: CLI Sync Tool Configuration**
 ```bash
-python3 sync.py --token YOUR_TOKEN --library ~/Music/Discogs --configure
+./bin/sync.sh --token YOUR_TOKEN --library ~/Music/Discogs --configure
 ```
 This saves your configuration for future use.
 
@@ -233,79 +233,78 @@ The `sync.py` tool provides a comprehensive command-line interface:
 
 ```bash
 # Full sync with label generation
-python3 sync.py
+./bin/sync.sh
 
 # Development mode (limited releases)
-python3 sync.py --dev
+./bin/sync.sh --dev
 
 # Dry run (process existing releases only)
-python3 sync.py --dryrun
+./bin/sync.sh --dryrun
 
 # Configure and save settings
-python3 sync.py --token YOUR_TOKEN --library ~/Music/Discogs --configure
+./bin/sync.sh --token YOUR_TOKEN --library ~/Music/Discogs --configure
 
 # Generate labels only (no sync)
-python3 sync.py --labels-only
+./bin/sync.sh --labels-only
 
 # Generate specific release
-python3 sync.py --labels-only --release 123456
+./bin/sync.sh --labels-only --release 123456
 
 # Generate labels since date
-python3 sync.py --labels-only --since 2024-01-01
+./bin/sync.sh --labels-only --since 2024-01-01
 
 # Limit number of labels
-python3 sync.py --labels-only --max-labels 10
+./bin/sync.sh --labels-only --max-labels 10
 ```
 
 ### Main Script (main.py)
 
-**Using convenience script (recommended):**
+**Using shell scripts (recommended):**
 ```bash
 # Full collection sync
-./run.sh
+./bin/main.sh
 
 # Development mode (first 10 releases only)
-./run.sh --dev
+./bin/main.sh --dev
 
 # Dry run (offline processing of existing releases)
-./run.sh --dryrun
+./bin/main.sh --dryrun
 
 # Download-only mode (sync and download without analysis)
-./run.sh --download-only
+./bin/main.sh --download-only
 
 # Custom limit (e.g., first 25 releases)  
-./run.sh --max 25
+./bin/main.sh --max 25
 
 # Regenerate labels only
-./run.sh --regenerate-labels
+./bin/main.sh --regenerate-labels
 ```
 
-**Or activate venv manually:**
+**Manual activation:**
 ```bash
 source venv/bin/activate
 
-python3 main.py                      # Full collection sync
-python3 main.py --dev                # Development mode
-python3 main.py --dryrun             # Dry run
-python3 main.py --download-only      # Download-only mode
-python3 main.py --max 25             # Custom limit
-python3 main.py --regenerate-labels  # Regenerate labels only
-python3 main.py --regenerate-waveforms  # Regenerate waveforms only
+python3 scripts/main.py                      # Full collection sync
+python3 scripts/main.py --dev                # Development mode
+python3 scripts/main.py --dryrun             # Dry run
+python3 scripts/main.py --download-only      # Download-only mode
+python3 scripts/main.py --max 25             # Custom limit
+python3 scripts/main.py --regenerate-labels  # Regenerate labels only
+python3 scripts/main.py --regenerate-waveforms  # Regenerate waveforms only
 ```
+### Generate Labels from Existing Releases
 
-### Generate Printable Labels
 ```bash
-# With virtual environment (activate first):
+# Using shell script (recommended)
+./bin/generate-labels.sh              # All releases
+./bin/generate-labels.sh --max 10     # First 10 releases
+./bin/generate-labels.sh --output ~/my_labels  # Custom output
+
+# Manual activation:
 source venv/bin/activate
-
-# Generate labels for all releases
-python3 generate_labels.py
-
-# Generate first 10 releases for testing
-python3 generate_labels.py --max 10
-
-# Custom output directory
-python3 generate_labels.py --output ~/my_labels
+python3 scripts/generate_labels.py
+python3 scripts/generate_labels.py --max 10
+python3 scripts/generate_labels.py --output ~/my_labels
 ```
 
 ## File Structure

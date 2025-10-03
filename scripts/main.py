@@ -18,12 +18,6 @@ from latex_generator import combine_latex_labels
 from pathlib import Path
 
 
-def gui_progress(current, total, phase="Processing"):
-    """Output GUI-friendly progress information"""
-    percentage = (current / total) * 100 if total > 0 else 0
-    print(f"GUI_PROGRESS: {percentage:.1f}% ({current}/{total}) - {phase}", flush=True)
-
-
 def generate_final_labels(library_mirror, specific_release_id=None):
     """Generate combined LaTeX labels after successful sync"""
     try:
@@ -72,13 +66,6 @@ def main():
     parser = argparse.ArgumentParser(
         description="Sync Discogs collection and generate labels",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
-
-    # Add GUI mode for progress reporting
-    parser.add_argument(
-        "--gui-mode",
-        action="store_true",
-        help="Enable GUI-friendly progress output (internal use)",
     )
 
     parser.add_argument(
@@ -222,9 +209,8 @@ def main():
                 "Discogs-Only Mode - Full Collection (metadata/covers only)"
             )
 
-        progress_cb = gui_progress if args.gui_mode else None
         library_mirror.sync_releases(
-            max_releases=limit, discogs_only=True, progress_callback=progress_cb
+            max_releases=limit, discogs_only=True, progress_callback=None
         )
     elif args.download_only:
         # Determine limit for Download-Only Mode
@@ -242,9 +228,8 @@ def main():
         else:
             logger.separator("Download-Only Mode - Full Collection (no analysis)")
 
-        progress_cb = gui_progress if args.gui_mode else None
         library_mirror.sync_releases(
-            max_releases=limit, download_only=True, progress_callback=progress_cb
+            max_releases=limit, download_only=True, progress_callback=None
         )
     else:
         # Normal sync operation
@@ -263,8 +248,7 @@ def main():
         else:
             logger.separator("Starting Discogs Library Sync (Full Collection)")
 
-        progress_cb = gui_progress if args.gui_mode else None
-        library_mirror.sync_releases(max_releases=limit, progress_callback=progress_cb)
+        library_mirror.sync_releases(max_releases=limit, progress_callback=None)
 
         # Generate labels after normal sync operation (with analysis)
         generate_final_labels(library_mirror)
