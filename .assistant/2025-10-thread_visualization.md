@@ -349,3 +349,69 @@ finally:
 - ✅ Better user experience with stable, readable display
 
 **Commit:** `sync/ui: Add log capture panel to prevent UI jumpiness`
+
+---
+
+### Essentia C++ Library Output Breaking UI (January 2025)
+
+**Issue:** Even after capturing Python log messages, `[   INFO   ]` messages from Essentia's MusicExtractor were still appearing and breaking the UI layout during audio analysis.
+
+**Root Cause:**
+- Essentia is a C++ library with Python bindings
+- Its log messages are written directly to stderr at the C++ level
+- These bypass Python's logging system entirely
+- Cannot be captured with Python logging handlers
+- Messages like `[   INFO   ] MusicExtractor: Read metadata` appeared during processing
+
+**Challenge:**
+Standard Python logging capture doesn't work for C++ library output that writes directly to file descriptors.
+
+**Solution:**
+Implemented OS-level file descriptor redirection:
+
+1. **Backup stderr**: Use `os.dup(2)` to save the original stderr file descriptor
+2. **Redirect to /dev/null**: Use `os.dup2()` to redirect stderr to `/dev/null` during Live display
+3. **Restore after**: Restore original stderr when Live display ends
+4. **Safe handling**: Wrapped in try/except to gracefully handle any redirection failures
+
+**Implementation:**
+
+```python
+# In install_log_handler()
+sys.stderr.flush()
+self.stderr_fd_backup = os.dup(2)  # Backup stderr
+self.devnull_fd = os.open(os.devnull, os.O_WRONLY)
+os.dup2(self.devnull_fd, 2)  # Redirect stderr to /dev/null
+
+# In remove_log_handler()
+sys.stderr.flush()
+os.dup2(self.stderr_fd_backup, 2)  # Restore original stderr
+os.close(self.stderr_fd_backup)
+os.close(self.devnull_fd)
+```
+
+**Why This Works:**
+- File descriptor 2 is stderr at the OS level
+- C++ libraries write to this descriptor directly
+- `os.dup2()` operates below Python's abstraction layer
+- Catches all stderr output, regardless of source
+
+**Testing:**
+```bash
+# Before: [   INFO   ] messages appeared during processing
+# After: Clean UI with no C++ library output
+./bin/sync.sh --max 1
+./bin/sync.sh --dev
+```
+
+**Benefits:**
+- ✅ Completely clean UI - no messages breaking layout
+- ✅ Captures C++ library output that bypasses Python logging
+- ✅ Safely restores stderr after display ends
+- ✅ Graceful fallback if redirection fails
+- ✅ Works for Essentia and any other C++ libraries
+
+**Note:**
+The initial `[   INFO   ] MusicExtractorSVM: no classifier models...` message still appears because it's logged during Essentia import, before the Live display starts. This is unavoidable but doesn't affect the UI since it happens before visualization begins.
+
+**Commit:** `sync/ui: Suppress Essentia C++ library output during Live display`
