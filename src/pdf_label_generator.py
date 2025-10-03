@@ -92,7 +92,7 @@ def draw_label(c, x, y, metadata, release_folder, font_family):
     """
     # Constants
     padding = 2 * mm
-    cover_size = 12 * mm
+    cover_size = 8 * mm  # Reduced to not overflow artist/title height
 
     # Extract metadata
     artist = ", ".join(metadata.get("artist", ["Unknown Artist"]))[:45]
@@ -204,7 +204,7 @@ def draw_label(c, x, y, metadata, release_folder, font_family):
     qr_path = Path(release_folder) / "qrcode.png"
     if qr_path.exists():
         try:
-            qr_size = 12 * mm
+            qr_size = 4 * mm  # Reduced to 1/3 of original size (12mm / 3 = 4mm)
             c.drawImage(
                 str(qr_path),
                 x + LABEL_WIDTH - qr_size - padding,
