@@ -649,6 +649,7 @@ class DiscogsLibraryMirror:
                             for release_id in releases_to_process
                         ]
 
+                        completed_futures = 0
                         for future in concurrent.futures.as_completed(futures):
                             if monitor.is_shutdown_requested():
                                 # Cancel remaining futures
@@ -658,27 +659,40 @@ class DiscogsLibraryMirror:
 
                             try:
                                 result = future.result()
+                                completed_futures += 1
                             except Exception as e:
                                 logger.error(f"Error during synchronization: {e}")
+                                completed_futures += 1
 
-                            # Update display
+                            # Update display after each completion
                             live.update(monitor._build_display())
 
-                    # Final update
-                    time.sleep(0.5)
-                    live.update(monitor._build_display())
+                    # Wait for executor to fully shut down
+                    # This ensures all threads have finished and updated their state
 
-                # Print summary
-                if monitor.is_shutdown_requested():
-                    console.print("\n[bold yellow]⚠️  Shutdown completed[/]")
-                else:
-                    console.print(f"\n[bold green]✅ All releases processed![/]")
+                # Final update after executor context exits
+            time.sleep(0.1)  # Brief pause to ensure all state updates are visible
 
-                console.print(
-                    f"[bold]Completed:[/] {monitor.completed_count}/{monitor.total_releases}"
-                )
-                if monitor.error_count > 0:
-                    console.print(f"[bold red]Errors:[/] {monitor.error_count}")
+            # Build final display one more time to ensure 100% is shown
+            final_display = monitor._build_display()
+            console.print(final_display)
+
+            # Print summary
+            if monitor.is_shutdown_requested():
+                console.print("\n[bold yellow]⚠️  Shutdown completed[/]")
+            else:
+                console.print(f"\n[bold green]✅ All releases processed![/]")
+
+            console.print(
+                f"[bold]Completed:[/] {monitor.completed_count}/{monitor.total_releases}"
+            )
+            if monitor.error_count > 0:
+                console.print(f"[bold red]Errors:[/] {monitor.error_count}")
+
+            # Clear message that sync phase is complete
+            console.print("\n[bold cyan]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/]")
+            console.print("[bold green]✅ Sync phase complete![/]")
+            console.print("[bold cyan]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/]\n")
 
             except KeyboardInterrupt:
                 monitor._signal_handler(None, None)

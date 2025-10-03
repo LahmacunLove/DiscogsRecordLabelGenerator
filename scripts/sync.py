@@ -87,7 +87,7 @@ def sync_library(mode="dev", max_releases=None, dryrun=False):
             logger.success("Dry run processing completed")
         else:
             mirror.sync_releases(max_releases=max_releases)
-            logger.success("Library sync completed successfully")
+            logger.success("✅ Library sync completed successfully")
 
         return mirror
     except KeyboardInterrupt:
@@ -107,6 +107,7 @@ def generate_labels(
         return False
 
     logger.separator("Generating Labels")
+    logger.info("Starting label generation process...")
 
     # Use library path from the mirror
     library_path = str(mirror.library_path)
@@ -128,6 +129,7 @@ def generate_labels(
     if success:
         logger.success("📋 Labels generated successfully!")
         logger.info(f"📁 Output: {output_dir}")
+        logger.info("Label generation phase complete")
 
         # Check for generated files
         output_path = Path(output_dir)
@@ -268,11 +270,13 @@ Examples:
 
             if not mirror:
                 return 1
+
+            logger.info("Sync phase complete. Moving to label generation...")
         except Exception as e:
             logger.error(f"Sync failed: {e}")
             return 1
 
-    # Generate labels
+    # Generate labels (this may take a while for large collections)
     if args.labels or args.labels_only:
         # For labels-only mode, need to load the mirror
         if args.labels_only and not mirror:
