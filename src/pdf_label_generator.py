@@ -92,7 +92,8 @@ def draw_label(c, x, y, metadata, release_folder, font_family):
     """
     # Constants
     padding = 2 * mm
-    cover_size = 8 * mm  # Reduced to not overflow artist/title height
+    cover_size = 10 * mm  # Increased cover size
+    track_index_width = cover_size  # Make track index column same width as cover
 
     # Extract metadata
     artist = ", ".join(metadata.get("artist", ["Unknown Artist"]))[:45]
@@ -107,14 +108,22 @@ def draw_label(c, x, y, metadata, release_folder, font_family):
     # Header section
     header_y = y + LABEL_HEIGHT - padding
 
-    # Draw cover image (top-left)
+    # Footer section at top
+    footer_y = header_y - 2 * mm
+    c.setFont(font_family, 6.5)
+    footer_text = f"{label_name}, {catalog_no}, {year}, {genres}, ID: {release_id}"
+    footer_text = truncate_text(footer_text, 120)
+    c.drawString(x + padding, footer_y, footer_text)
+
+    # Draw cover image (below footer)
+    cover_y = footer_y - 3 * mm - cover_size
     cover_path = Path(release_folder) / "cover.jpg"
     if cover_path.exists():
         try:
             c.drawImage(
                 str(cover_path),
                 x + padding,
-                header_y - cover_size,
+                cover_y,
                 width=cover_size,
                 height=cover_size,
                 preserveAspectRatio=True,
@@ -124,25 +133,55 @@ def draw_label(c, x, y, metadata, release_folder, font_family):
             logger.debug(f"Could not load cover image: {e}")
 
     # Draw artist and title (next to cover)
-    text_x = x + padding + cover_size + 2 * mm
-    text_y = header_y - 3 * mm
+    # Align with track title start position (after track index column)
+    text_x = x + padding + track_index_width + 2 * mm
+    # Push down 4pt (approximately 1.4mm)
+    text_y = cover_y + cover_size - 3 * mm - 1.4 * mm
 
-    c.setFont(font_family, 8)
+    # Calculate available width for text (label width - cover - padding - qr code space)
+    available_width = (
+        LABEL_WIDTH - track_index_width - 4 * mm - 6 * mm
+    )  # 6mm for QR code
+
+    # Artist name with overflow protection
+    c.setFont(font_family, 10)
+    artist_width = c.stringWidth(artist, font_family, 10)
+    if artist_width > available_width:
+        # Truncate artist to fit
+        while (
+            c.stringWidth(artist + "...", font_family, 10) > available_width
+            and len(artist) > 1
+        ):
+            artist = artist[:-1]
+        artist = artist + "..."
     c.drawString(text_x, text_y, artist)
 
-    c.setFont(f"{font_family}-Bold", 10)
-    text_y -= 3.5 * mm
+    # Title with overflow protection
+    c.setFont(f"{font_family}-Bold", 14)
+    text_y -= (
+        5.5 * mm
+    )  # Increased spacing from 3.5mm to 5.5mm (added 4pt ≈ 1.4mm extra + original spacing)
+    title_width = c.stringWidth(title, f"{font_family}-Bold", 14)
+    if title_width > available_width:
+        # Truncate title to fit
+        while (
+            c.stringWidth(title + "...", f"{font_family}-Bold", 14) > available_width
+            and len(title) > 1
+        ):
+            title = title[:-1]
+        title = title + "..."
     c.drawString(text_x, text_y, title)
 
     # Track table section
-    table_y = text_y - 6 * mm
+    table_y = text_y - 7 * mm  # Adjusted for larger title
 
     # Table headers (very small)
-    c.setFont(font_family, 5)
+    c.setFont(font_family, 7)
     col_pos = x + padding
+    track_title_x = col_pos + track_index_width + 2 * mm  # Align with album title
 
-    # Draw up to 10 tracks
-    max_tracks = 10
+    # Draw up to 8 tracks
+    max_tracks = 8
     row_height = 3.5 * mm
 
     for i in range(max_tracks):
@@ -151,7 +190,7 @@ def draw_label(c, x, y, metadata, release_folder, font_family):
         if i < len(tracklist):
             track = tracklist[i]
             position = str(track.get("position", ""))[:3]
-            track_title = str(track.get("title", ""))[:30]
+            track_title = str(track.get("title", ""))[:28]
 
             # Try to get BPM and Key from analysis
             bpm = ""
@@ -161,21 +200,39 @@ def draw_label(c, x, y, metadata, release_folder, font_family):
                 try:
                     with open(analysis_file) as f:
                         analysis = json.load(f)
-                        bpm = (
-                            str(int(analysis.get("bpm", 0)))
-                            if analysis.get("bpm")
-                            else ""
-                        )
-                        key = analysis.get("key", "")
+                        # Extract BPM from rhythm section
+                        bpm_value = analysis.get("rhythm", {}).get("bpm", 0)
+                        if bpm_value:
+                            bpm = str(int(bpm_value))
+                        # Extract key and scale from tonal section
+                        key_info = analysis.get("tonal", {}).get("key_temperley", {})
+                        key_note = key_info.get("key", "")
+                        key_scale = key_info.get("scale", "")
+                        if key_note and key_scale:
+                            # Format as "C maj" or "A min"
+                            scale_abbr = "maj" if key_scale == "major" else "min"
+                            key = f"{key_note} {scale_abbr}"
+                        elif key_note:
+                            key = key_note
                 except:
                     pass
 
             # Draw track info
-            c.setFont(font_family, 5.5)
-            c.drawString(col_pos, row_y, position)
-            c.drawString(col_pos + 8 * mm, row_y, track_title)
-            c.drawString(col_pos + 50 * mm, row_y, bpm)
-            c.drawString(col_pos + 60 * mm, row_y, key)
+            c.setFont(font_family, 7.5)
+
+            # Right-align track position within the track index column
+            position_width = c.stringWidth(position, font_family, 7.5)
+            position_x = col_pos + track_index_width - position_width
+            c.drawString(position_x, row_y, position)
+
+            # Draw track title aligned with album title
+            c.drawString(track_title_x, row_y, track_title)
+
+            # Draw BPM and Key if available
+            if bpm:
+                c.drawString(col_pos + 48 * mm, row_y, bpm)
+            if key:
+                c.drawString(col_pos + 58 * mm, row_y, key)
 
             # Draw waveform if available
             waveform_path = Path(release_folder) / f"{position}_waveform.png"
@@ -192,13 +249,6 @@ def draw_label(c, x, y, metadata, release_folder, font_family):
                     )
                 except Exception as e:
                     logger.debug(f"Could not load waveform: {e}")
-
-    # Footer section
-    footer_y = y + padding
-    c.setFont(font_family, 4.5)
-    footer_text = f"{label_name}, {catalog_no}, {year}, {genres}, ID: {release_id}"
-    footer_text = truncate_text(footer_text, 120)
-    c.drawString(x + padding, footer_y, footer_text)
 
     # Draw QR code if available (top-right corner)
     qr_path = Path(release_folder) / "qrcode.png"

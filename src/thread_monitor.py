@@ -318,10 +318,10 @@ class ThreadMonitor:
             expand=True,
         )
         worker_table.add_column("", width=2, no_wrap=True)  # Status icon
-        worker_table.add_column("#", width=4, style="yellow", no_wrap=True)
-        worker_table.add_column("Release", width=25, style="white", no_wrap=True)
-        worker_table.add_column("Progress", width=15, style="green", no_wrap=True)
-        worker_table.add_column("Time", width=5, style="yellow", no_wrap=True)
+        worker_table.add_column("#", width=3, style="yellow", no_wrap=True)
+        worker_table.add_column("Release", width=18, style="white", no_wrap=True)
+        worker_table.add_column("Progress", width=10, style="green", no_wrap=True)
+        worker_table.add_column("Time", width=3, style="yellow", no_wrap=True)
         worker_table.add_column("Step", style="cyan", no_wrap=False)
 
         with self.lock:
@@ -368,8 +368,8 @@ class ThreadMonitor:
         # Release column
         if worker.status == "working":
             title_display = (
-                worker.release_title[:32] + ".."
-                if len(worker.release_title) > 32
+                worker.release_title[:22] + ".."
+                if len(worker.release_title) > 22
                 else worker.release_title
             )
             release_text = f"{title_display} [{worker.release_id}]"
@@ -380,7 +380,7 @@ class ThreadMonitor:
 
         # Progress column (bar with percentage)
         if worker.status == "working":
-            bar_width = 10
+            bar_width = 6
             filled = int(worker.progress_percent / 100 * bar_width)
             bar = "█" * filled + "░" * (bar_width - filled)
             progress_text = f"[{bar}] {worker.progress_percent:3.0f}%"
@@ -399,15 +399,15 @@ class ThreadMonitor:
         # Step column
         if worker.status == "working":
             step_display = (
-                worker.current_step[:16] + ".."
-                if len(worker.current_step) > 16
+                worker.current_step[:40] + ".."
+                if len(worker.current_step) > 40
                 else worker.current_step
             )
             step_text = step_display
         elif worker.status == "error" and worker.error_message:
             error_display = (
-                worker.error_message[:16] + ".."
-                if len(worker.error_message) > 16
+                worker.error_message[:40] + ".."
+                if len(worker.error_message) > 40
                 else worker.error_message
             )
             step_text = f"❌ {error_display}"

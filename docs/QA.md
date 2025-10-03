@@ -101,6 +101,69 @@ This document contains questions and answers about the codebase behavior and imp
 
 ## Audio Analysis
 
+### Q: What metadata fields should be used from Essentia analysis JSON for BPM and musical key?
+
+**Asked:** 2025-01-10
+
+**Question:** The PDF labels show incorrect or empty BPM and key values. What's the correct JSON structure for accessing Essentia MusicExtractor analysis data?
+
+**Answer:**
+
+Essentia's `MusicExtractor` stores analysis results in a **nested JSON structure**, not at the top level. The correct paths are:
+
+**BPM (Tempo):**
+```python
+bpm_value = analysis["rhythm"]["bpm"]
+```
+
+**Musical Key:**
+```python
+key_note = analysis["tonal"]["key_temperley"]["key"]     # e.g., "C", "D#", "A"
+key_scale = analysis["tonal"]["key_temperley"]["scale"]  # "major" or "minor"
+```
+
+**Display Format:**
+- Combine key and scale for readability: `"C major"`, `"A minor"`
+- BPM should be displayed as an integer: `"128"`, `"174"`
+
+**JSON Structure Example:**
+```json
+{
+  "rhythm": {
+    "bpm": 128.5,
+    "beats_count": 342,
+    "onset_rate": 2.14
+  },
+  "tonal": {
+    "key_temperley": {
+      "key": "C",
+      "scale": "major",
+      "strength": 0.82
+    },
+    "chords_strength": { "mean": 0.65 }
+  }
+}
+```
+
+**Common Mistakes:**
+- ❌ `analysis.get("bpm")` - BPM is NOT at top level
+- ❌ `analysis.get("key")` - Key is NOT at top level
+- ✅ `analysis["rhythm"]["bpm"]` - Correct path
+- ✅ `analysis["tonal"]["key_temperley"]["key"]` - Correct path
+
+**Relevant Files:**
+- `src/pdf_label_generator.py` (lines 174-191) - Correct implementation for PDF labels
+- `scripts/similarity_analyzer.py` (lines 63-78) - Reference implementation for feature extraction
+- `src/analyzeSoundFile.py` (lines 57-160) - Essentia MusicExtractor analysis
+
+**Essentia Documentation:**
+- [MusicExtractor Algorithm](https://essentia.upf.edu/reference/std_MusicExtractor.html)
+- [Music Extractor Output Format](https://essentia.upf.edu/streaming_extractor_music.html)
+
+**Related Topics:** Audio analysis, PDF label generation, Essentia integration, metadata extraction
+
+---
+
 *Questions about audio feature extraction and similarity analysis will be documented here.*
 
 ---
