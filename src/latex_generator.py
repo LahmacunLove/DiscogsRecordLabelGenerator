@@ -406,178 +406,30 @@ def create_latex_label_file(release_folder, metadata):
 
 
 def _create_label_original(release_folder, metadata, label_file):
-    """Original label design - based on the original createLatexLabelFile method"""
+    """
+    New unified label design with:
+    - Header: Cover image (left, 2 rows), Artist name, Album title (bold), QR code (top-right)
+    - Table: 10 rows max with columns: Index, Track Name, BPM, Key, Waveform
+    - Footer: Label, Catalog, Year, Genre, Release ID
+    """
 
     try:
-        logger.process(
-            f"Creating original LaTeX label for release {metadata.get('id', 'unknown')}"
-        )
+        logger.process(f"Creating label for release {metadata.get('id', 'unknown')}")
 
-        # Load YouTube matches for duration fallback
-        yt_matches_file = os.path.join(release_folder, "yt_matches.json")
-        youtube_durations = {}
-        if os.path.exists(yt_matches_file):
-            try:
-                with open(yt_matches_file, "r", encoding="utf-8") as f:
-                    yt_matches = json.load(f)
-                # Create mapping from track position to YouTube duration
-                for match in yt_matches:
-                    track_pos = match.get("track_position")
-                    youtube_match = match.get("youtube_match")
-                    if track_pos and youtube_match and youtube_match.get("length"):
-                        # Convert seconds to MM:SS format
-                        duration_seconds = youtube_match["length"]
-                        minutes = duration_seconds // 60
-                        seconds = duration_seconds % 60
-                        youtube_durations[track_pos] = f"{minutes}:{seconds:02d}"
-            except Exception as e:
-                logger.debug(
-                    f"Error loading YouTube matches for duration fallback: {e}"
-                )
+        # Get cover image path
+        cover_path = os.path.join(release_folder, "cover.jpg")
+        if not os.path.exists(cover_path):
+            cover_path = os.path.join(release_folder, "cover.png")
 
-        # Create DataFrame for tracks (as in original)
-        tracks_data = []
-        for track in metadata.get("tracklist", []):
-            track_pos = track.get("position", "")
-            track_title = track.get("title", "")
-            track_artist = track.get("artist", "")
-            track_duration = track.get("duration", "")
+        cover_latex = ""
+        if os.path.exists(cover_path):
+            cover_abs_path = os.path.abspath(cover_path).replace("\\", "/")
+            # Cover image: 1.2cm width, positioned in header
+            cover_latex = f"\\includegraphics[width=1.2cm]{{{cover_abs_path}}}"
 
-            # Use YouTube duration as fallback if Discogs duration is missing
-            if not track_duration or track_duration.strip() == "":
-                if track_pos in youtube_durations:
-                    track_duration = youtube_durations[track_pos]
-
-            # Search for analysis data
-            track_base = os.path.join(release_folder, track_pos)
-
-            # Load BPM and Key from JSON (if available)
-            bpm, key = "", ""
-            json_file = f"{track_base}.json"
-            if os.path.exists(json_file):
-                try:
-                    with open(json_file, "r") as f:
-                        analysis_data = json.load(f)
-
-                    # BPM from rhythm section
-                    bpm_value = analysis_data.get("rhythm", {}).get("bpm", 0)
-                    if bpm_value and bpm_value > 0:
-                        bpm = str(round(bpm_value))
-
-                    # Key from tonal section (check various possibilities)
-                    tonal_data = analysis_data.get("tonal", {})
-                    key_key = tonal_data.get("key_key", "")
-                    key_scale = tonal_data.get("key_scale", "")
-                    key_temperley = tonal_data.get("key_temperley", {})
-
-                    # Check different key sources
-                    if key_temperley and isinstance(key_temperley, dict):
-                        key_name = key_temperley.get("key", "")
-                        key_scale = key_temperley.get("scale", "")
-                        if key_name:
-                            # Combine Key + Scale (e.g. "C major" → "C")
-                            if "major" in key_scale.lower():
-                                key = key_name.upper()
-                            elif "minor" in key_scale.lower():
-                                key = key_name.lower() + "m"
-                            else:
-                                key = key_name
-                    elif key_key:
-                        key = key_key
-
-                except Exception as e:
-                    logger.debug(f"Error parsing analysis data for {track_pos}: {e}")
-                    pass
-
-            # Waveform path (absolute path as in original)
-            waveform_path = f"{track_base}_waveform.png"
-            waveform_latex = ""
-            if os.path.exists(waveform_path):
-                # Absolute path for LaTeX as in original
-                waveform_latex = (
-                    f"\\includegraphics[width=2cm]{{{os.path.abspath(waveform_path)}}}"
-                )
-
-            tracks_data.append(
-                {
-                    "pos": track_pos,
-                    "title": track_title,
-                    "artist": track_artist,
-                    "duration": track_duration,
-                    "bpm": bpm,
-                    "key": key,
-                    "waveform": waveform_latex,
-                }
-            )
-
-        # Create DataFrame (pandas-based as in original)
-        track_df = pd.DataFrame(tracks_data)
-
-        # Replace NaN values with empty strings (original behavior)
-        track_df = track_df.fillna("")
-
-        # Unicode conversion for LaTeX (applymap as in original)
-        for col in ["pos", "title", "artist", "duration", "bpm"]:
-            if col in track_df.columns:
-                track_df[col] = track_df[col].apply(unicode_to_latex)
-
-        # Special handling for Key column - convert to Camelot notation
-        if "key" in track_df.columns:
-            track_df["key"] = track_df["key"].apply(musical_key_to_camelot)
-
-        # Check if any tracks have durations (excluding empty strings)
-        has_durations = track_df["duration"].notna() & (track_df["duration"] != "")
-        has_any_duration = has_durations.any()
-
-        # Original Various Artists handling
-        unique_artists = track_df["artist"].unique()
-        if len(unique_artists) == 1:
-            # Only one artist - hide artist column (original logic)
-            if has_any_duration:
-                # Include duration column at the end
-                columns_to_show = ["pos", "title", "bpm", "key", "waveform", "duration"]
-                column_format = "@{}l@{\\hspace{3pt}}X@{\\hspace{3pt}}l@{\\hspace{3pt}}l@{\\hspace{2pt}}c@{\\hspace{3pt}}l@{}"
-            else:
-                # Exclude duration column
-                columns_to_show = ["pos", "title", "bpm", "key", "waveform"]
-                column_format = "@{}l@{\\hspace{3pt}}X@{\\hspace{3pt}}l@{\\hspace{3pt}}l@{\\hspace{2pt}}c@{}"
-        else:
-            # Multiple artists - combine title and artist (original behavior)
-            track_df["title"] = track_df["title"] + " / " + track_df["artist"]
-            if has_any_duration:
-                # Include duration column at the end
-                columns_to_show = ["pos", "title", "bpm", "key", "waveform", "duration"]
-                column_format = "@{}l@{\\hspace{3pt}}X@{\\hspace{3pt}}l@{\\hspace{3pt}}l@{\\hspace{2pt}}c@{\\hspace{3pt}}l@{}"
-            else:
-                # Exclude duration column
-                columns_to_show = ["pos", "title", "bpm", "key", "waveform"]
-                column_format = "@{}l@{\\hspace{3pt}}X@{\\hspace{3pt}}l@{\\hspace{3pt}}l@{\\hspace{2pt}}c@{}"
-
-        # Filter DataFrame
-        track_df_display = track_df[columns_to_show]
-
-        # LaTeX table with dynamic column format
-        latex_table = track_df_display.to_latex(
-            index=False,
-            header=False,  # Remove table header
-            escape=False,  # Important: Let LaTeX commands through
-            column_format=column_format,
-        )
-
-        # Remove all horizontal lines manually
-        latex_table = latex_table.replace("\\toprule\n", "")
-        latex_table = latex_table.replace("\\midrule\n", "")
-        latex_table = latex_table.replace("\\bottomrule\n", "")
-        latex_table = latex_table.replace("\\hline\n", "")
-        latex_table = latex_table.replace("\\toprule", "")
-        latex_table = latex_table.replace("\\midrule", "")
-        latex_table = latex_table.replace("\\bottomrule", "")
-        latex_table = latex_table.replace("\\hline", "")
-
-        # Prepare release information
+        # Prepare artist and title
         artists = metadata.get("artist", [])
         if isinstance(artists, list):
-            # Remove duplicates while preserving order
             unique_artists = []
             for artist in artists:
                 if artist not in unique_artists:
@@ -587,71 +439,228 @@ def _create_label_original(release_folder, metadata, label_file):
             artist_str = str(artists)
 
         title = metadata.get("title", "")
+
+        # Truncate artist and title to fit
+        artist_truncated = (
+            (artist_str[:45] + "...") if len(artist_str) > 45 else artist_str
+        )
+        title_truncated = (title[:45] + "...") if len(title) > 45 else title
+
+        # Prepare footer metadata
         labels = metadata.get("label", [])
         if isinstance(labels, list):
             label_str = ", ".join(labels)
         else:
             label_str = str(labels)
 
-        # Catalog numbers
         catalog_numbers = metadata.get("catalog_numbers", [])
         if isinstance(catalog_numbers, list):
             catalog_str = ", ".join(catalog_numbers)
         else:
             catalog_str = str(catalog_numbers) if catalog_numbers else ""
 
-        # Genres
         genres = metadata.get("genres", [])
         if isinstance(genres, list):
-            # Limit to first 2-3 genres to avoid overly long footline
-            genre_str = ", ".join(genres[:3])
+            genre_str = ", ".join(genres[:2])  # Max 2 genres
         else:
             genre_str = str(genres) if genres else ""
 
-        # Year and release ID
         year = str(metadata.get("year", ""))
         release_id = str(metadata.get("id", ""))
 
-        # Minipage method with proper adjustbox structure
-        # Adjusted for Avery L4744REV-65: 96mm x 50.8mm (3.78" x 2" = 9.6cm x 5.08cm)
-        latex_content = f"""\\begin{{minipage}}[t][5.08cm][t]{{9.6cm}}
+        # Build footer with truncation
+        footer_parts = []
+        if label_str:
+            footer_parts.append(unicode_to_latex(label_str[:30]))
+        if catalog_str:
+            footer_parts.append(unicode_to_latex(catalog_str[:20]))
+        if year:
+            footer_parts.append(year)
+        if genre_str:
+            footer_parts.append(unicode_to_latex(genre_str[:30]))
+        footer_parts.append(f"ID: {release_id}")
+        footer_text = ", ".join(footer_parts)
 
-\\begin{{adjustbox}}{{max width=9cm}}
-  \\textbf{{{unicode_to_latex(artist_str)}}}
-\\end{{adjustbox}} \\\\
+        # Process tracks - split into chunks of 10
+        tracklist = metadata.get("tracklist", [])
+        track_chunks = []
 
-\\begin{{adjustbox}}{{max width=9cm}}
-  {unicode_to_latex(title)}
-\\end{{adjustbox}}
+        for i in range(0, len(tracklist), 10):
+            chunk = tracklist[i : i + 10]
+            track_chunks.append(chunk)
 
-\\vspace{{.4cm}}
+        # If no tracks, create at least one label
+        if not track_chunks:
+            track_chunks = [[]]
 
-\\vfill
-\\begin{{adjustbox}}{{max height=1.4cm}}
-\\scriptsize
-{latex_table}
-\\end{{adjustbox}}
-\\vfill
+        # Generate labels (one per chunk)
+        labels_created = []
 
+        for chunk_idx, track_chunk in enumerate(track_chunks):
+            # Build track table
+            tracks_data = []
+
+            for track in track_chunk:
+                track_pos = track.get("position", "")
+                track_title = track.get("title", "")
+
+                # Truncate track title to prevent overflow
+                track_title_truncated = (
+                    (track_title[:35] + "...") if len(track_title) > 35 else track_title
+                )
+
+                # Search for analysis data
+                track_base = os.path.join(release_folder, track_pos)
+
+                # Load BPM and Key
+                bpm, key = "", ""
+                json_file = f"{track_base}.json"
+                if os.path.exists(json_file):
+                    try:
+                        with open(json_file, "r") as f:
+                            analysis_data = json.load(f)
+
+                        # BPM from rhythm section
+                        bpm_value = analysis_data.get("rhythm", {}).get("bpm", 0)
+                        if bpm_value and bpm_value > 0:
+                            bpm = str(round(bpm_value))
+
+                        # Key from tonal section
+                        tonal_data = analysis_data.get("tonal", {})
+                        key_temperley = tonal_data.get("key_temperley", {})
+
+                        if key_temperley and isinstance(key_temperley, dict):
+                            key_name = key_temperley.get("key", "")
+                            key_scale = key_temperley.get("scale", "")
+                            if key_name:
+                                if "major" in key_scale.lower():
+                                    key = key_name.upper()
+                                elif "minor" in key_scale.lower():
+                                    key = key_name.lower() + "m"
+                                else:
+                                    key = key_name
+                        elif tonal_data.get("key_key"):
+                            key = tonal_data.get("key_key")
+
+                    except Exception as e:
+                        logger.debug(
+                            f"Error parsing analysis data for {track_pos}: {e}"
+                        )
+
+                # Waveform path
+                waveform_path = f"{track_base}_waveform.png"
+                waveform_latex = ""
+                if os.path.exists(waveform_path):
+                    waveform_abs = os.path.abspath(waveform_path).replace("\\", "/")
+                    waveform_latex = (
+                        f"\\includegraphics[width=1.8cm,height=0.3cm]{{{waveform_abs}}}"
+                    )
+
+                tracks_data.append(
+                    {
+                        "pos": unicode_to_latex(track_pos),
+                        "title": unicode_to_latex(track_title_truncated),
+                        "bpm": bpm,
+                        "key": musical_key_to_camelot(key) if key else "",
+                        "waveform": waveform_latex,
+                    }
+                )
+
+            # Pad to exactly 10 rows
+            while len(tracks_data) < 10:
+                tracks_data.append(
+                    {
+                        "pos": "",
+                        "title": "",
+                        "bpm": "",
+                        "key": "",
+                        "waveform": "",
+                    }
+                )
+
+            # Create DataFrame
+            track_df = pd.DataFrame(tracks_data)
+
+            # Column format: tight spacing for Avery L4744REV-65 (96mm width)
+            # Index | Title (flexible) | BPM | Key | Waveform
+            column_format = "@{}l@{\\hspace{2pt}}X@{\\hspace{2pt}}r@{\\hspace{2pt}}c@{\\hspace{2pt}}c@{}"
+
+            latex_table = track_df.to_latex(
+                index=False,
+                header=False,
+                escape=False,
+                column_format=column_format,
+            )
+
+            # Remove horizontal lines
+            for rule in ["\\toprule", "\\midrule", "\\bottomrule", "\\hline"]:
+                latex_table = latex_table.replace(rule + "\n", "")
+                latex_table = latex_table.replace(rule, "")
+
+            # Build label content with header layout
+            # Header: cover (left) + artist/title (middle) + QR placeholder (handled in combine)
+            latex_content = f"""\\begin{{minipage}}[t][5.08cm][t]{{9.6cm}}
+\\vspace{{0pt}}
+
+% Header with cover image and text
+\\noindent\\begin{{minipage}}[t]{{1.3cm}}
+{cover_latex if cover_latex else ""}
+\\end{{minipage}}%
+\\hfill%
+\\begin{{minipage}}[t]{{7.0cm}}
 \\raggedright
-\\tiny{{\\textbf{{{unicode_to_latex(label_str)}}}{", " + unicode_to_latex(catalog_str) if catalog_str else ""}, {year}{", " + unicode_to_latex(genre_str) if genre_str else ""}, Release ID: {release_id}}}
+\\small{{{unicode_to_latex(artist_truncated)}}}\\\\
+\\textbf{{\\small{{{unicode_to_latex(title_truncated)}}}}}
+\\end{{minipage}}
+
+\\vspace{{0.3cm}}
+
+% Track table (10 rows fixed)
+{{\\scriptsize
+{latex_table}
+}}
+
+\\vspace{{0.1cm}}
+
+% Footer
+\\noindent{{\\tiny{{{footer_text}}}}}
+
 \\end{{minipage}}"""
 
-        # \adjustbox{width=5cm, height=3cm}{\includegraphics{bild.png}}
+            # Determine label filename
+            if len(track_chunks) > 1:
+                chunk_label_file = label_file.replace(
+                    ".tex", f"_part{chunk_idx + 1}.tex"
+                )
+            else:
+                chunk_label_file = label_file
 
-        # Write LaTeX file
-        with open(label_file, "w", encoding="utf-8") as f:
-            f.write(latex_content)
+            # Write LaTeX file
+            with open(chunk_label_file, "w", encoding="utf-8") as f:
+                f.write(latex_content)
 
-        # Adapted tabularx conversion for minipage (3.78in = 96mm for Avery L4744REV-65)
-        inplace_change(label_file, "\\begin{tabular}", "\\begin{tabularx}{3.78in}")
-        inplace_change(label_file, "\\end{tabular}", "\\end{tabularx}")
+            # Convert tabular to tabularx for flexible columns
+            inplace_change(
+                chunk_label_file, "\\begin{tabular}", "\\begin{tabularx}{9.2cm}"
+            )
+            inplace_change(chunk_label_file, "\\end{tabular}", "\\end{tabularx}")
 
-        logger.success(f"Original LaTeX label created: {os.path.basename(label_file)}")
+            labels_created.append(os.path.basename(chunk_label_file))
+
+        if len(labels_created) > 1:
+            logger.success(
+                f"Created {len(labels_created)} label files: {', '.join(labels_created)}"
+            )
+        else:
+            logger.success(f"Label created: {labels_created[0]}")
+
         return True
 
     except Exception as e:
-        logger.error(f"Error creating original LaTeX label: {e}")
+        logger.error(f"Error creating label: {e}")
+        import traceback
+
+        logger.debug(traceback.format_exc())
         return False
 
 
@@ -698,7 +707,17 @@ def combine_latex_labels(
         release_path = os.path.join(library_path, release_folder)
         label_file = os.path.join(release_path, "label.tex")
 
-        if not os.path.exists(label_file):
+        # Find all label files (handle multi-part labels)
+        label_files = []
+        if os.path.exists(label_file):
+            label_files.append("label.tex")
+
+        # Check for multi-part labels (label_part1.tex, label_part2.tex, etc.)
+        for item in os.listdir(release_path):
+            if item.startswith("label_part") and item.endswith(".tex"):
+                label_files.append(item)
+
+        if not label_files:
             logger.warning(f"No LaTeX label found for release: {release_folder}")
             logger.info("Creating LaTeX label first...")
             # Load metadata for label creation
@@ -710,6 +729,13 @@ def combine_latex_labels(
                     if not create_latex_label_file(release_path, metadata):
                         logger.error("Failed to create LaTeX label")
                         return False
+                    # Re-check for created labels
+                    label_files = []
+                    if os.path.exists(label_file):
+                        label_files.append("label.tex")
+                    for item in os.listdir(release_path):
+                        if item.startswith("label_part") and item.endswith(".tex"):
+                            label_files.append(item)
                 except (json.JSONDecodeError, FileNotFoundError) as e:
                     logger.error(f"Error loading metadata for {release_folder}: {e}")
                     return False
@@ -717,7 +743,7 @@ def combine_latex_labels(
                 logger.error(f"No metadata.json found for {release_folder}")
                 return False
 
-        release_dirs = [(release_folder, "label.tex")]
+        release_dirs = [(release_folder, label_file) for label_file in label_files]
     else:
         # Scan all releases
         logger.info("Scanning for releases with LaTeX labels...")
@@ -745,8 +771,20 @@ def combine_latex_labels(
         for item in tqdm(all_items, desc="Scanning releases", unit="folder"):
             item_path = os.path.join(library_path, item)
             if os.path.isdir(item_path):
-                label_file = os.path.join(item_path, "label.tex")
-                if os.path.exists(label_file):
+                # Find all label files for this release
+                label_files = []
+                main_label = os.path.join(item_path, "label.tex")
+                if os.path.exists(main_label):
+                    label_files.append("label.tex")
+
+                # Check for multi-part labels
+                for label_item in os.listdir(item_path):
+                    if label_item.startswith("label_part") and label_item.endswith(
+                        ".tex"
+                    ):
+                        label_files.append(label_item)
+
+                if label_files:
                     # Timestamp filtering if since_date provided
                     if since_datetime:
                         metadata_file = os.path.join(item_path, "metadata.json")
@@ -774,14 +812,16 @@ def combine_latex_labels(
                                                 tzinfo=None
                                             )
                                         if release_datetime >= since_datetime:
-                                            release_dirs.append((item, "label.tex"))
+                                            for lf in label_files:
+                                                release_dirs.append((item, lf))
                                     else:
                                         # If no timestamp, use directory modification time
                                         dir_mtime = datetime.fromtimestamp(
                                             os.path.getmtime(item_path)
                                         )
                                         if dir_mtime >= since_datetime:
-                                            release_dirs.append((item, "label.tex"))
+                                            for lf in label_files:
+                                                release_dirs.append((item, lf))
                             except (json.JSONDecodeError, ValueError) as e:
                                 logger.debug(f"Error reading timestamp for {item}: {e}")
                                 # On errors, if no timestamp available, use directory time
@@ -789,17 +829,20 @@ def combine_latex_labels(
                                     os.path.getmtime(item_path)
                                 )
                                 if dir_mtime >= since_datetime:
-                                    release_dirs.append((item, "label.tex"))
+                                    for lf in label_files:
+                                        release_dirs.append((item, lf))
                         else:
                             # If no metadata.json, use directory time
                             dir_mtime = datetime.fromtimestamp(
                                 os.path.getmtime(item_path)
                             )
                             if dir_mtime >= since_datetime:
-                                release_dirs.append((item, "label.tex"))
+                                for lf in label_files:
+                                    release_dirs.append((item, lf))
                     else:
                         # No time filtering
-                        release_dirs.append((item, "label.tex"))
+                        for lf in label_files:
+                            release_dirs.append((item, lf))
 
     if not release_dirs:
         logger.warning("No releases with LaTeX labels found")
@@ -888,15 +931,16 @@ def combine_latex_labels(
                                 qr_file = qr_plain_file
 
                             if qr_file:
-                                qr_x = x_pos + 3.25
-                                qr_y = y_pos - 0.36 + 1.975
+                                # Position QR code in top-right corner
+                                qr_x = x_pos + 3.15
+                                qr_y = y_pos - 0.25 + 1.975
                                 # Absolute path to QR code file
                                 qr_path = os.path.abspath(qr_file).replace("\\", "/")
                                 f.write(
-                                    f"\\node[right,align=left] at ({qr_x} in, {qr_y} in){{"
+                                    f"\\node[above right,inner sep=0] at ({qr_x} in, {qr_y} in){{"
                                 )
                                 f.write(
-                                    f"\\includegraphics[width=1.5cm]{{{qr_path}}}}};\n"
+                                    f"\\includegraphics[width=1.2cm]{{{qr_path}}}}};\n"
                                 )
 
                             # Include label content with adjusted positioning for Avery L4744REV-65

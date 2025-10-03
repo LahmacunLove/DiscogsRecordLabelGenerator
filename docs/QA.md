@@ -45,12 +45,45 @@ This document contains questions and answers about the codebase behavior and imp
   - Left/right margins: 0.276 inches (7mm)
   - Top/bottom margins: 0.846 inches (21.5mm)
 - Label generation: `src/latex_generator.py`
-  - Line ~616: Minipage dimensions set to 9.6cm x 5.08cm (96mm x 50.8mm)
-  - Line ~862: TikZ rectangle dimensions set to 3.78in x 2in
-  - Line ~868: Column spacing set to 3.937 inches (3.78" label + 0.157" gap)
-  - Line ~646: Tabularx width set to 3.78 inches
+  - Line ~408: Label generation function `_create_label_original()`
+  - Line ~587: Minipage dimensions set to 9.6cm x 5.08cm (96mm x 50.8mm)
+  - Line ~873: TikZ rectangle dimensions set to 3.78in x 2in
+  - Line ~876: Column spacing set to 3.937 inches (3.78" label + 0.157" gap)
+  - Line ~644: Tabularx width set to 9.2cm for track table
 
 **Note**: The system previously used US Letter paper with 4" x 2" labels. The change to Avery L4744REV-65 maintains the same height (50.8mm = 2") but reduces width from 101.6mm to 96mm to match standard European label sheets.
+
+---
+
+### Q: What is the layout of each label?
+
+**A:** Each label follows a unified design structure:
+
+**1. Header Section**:
+- **Left**: Cover image (1.2cm width) spanning 2 text rows
+- **Center**: Artist name (normal text) and album title (bold text)
+- **Top-right corner**: QR code (1.2cm, positioned by combine function)
+
+**2. Track Table** (10 rows fixed):
+- **Columns**: Index (e.g., A1, B2) | Track Name | BPM | Key | Waveform
+- Track names are truncated to 35 characters to prevent overflow
+- Empty rows are padded if album has fewer than 10 tracks
+- Albums with more than 10 tracks create multiple labels (label_part1.tex, label_part2.tex, etc.)
+
+**3. Footer Section**:
+- Record label name (max 30 chars)
+- Catalog number (max 20 chars)
+- Year
+- Genres (max 2, max 30 chars total)
+- Release ID
+
+**Text Truncation**:
+- Artist name: 45 characters max
+- Album title: 45 characters max
+- Track names: 35 characters max
+- All truncated text appends "..."
+
+**Implementation**: `src/latex_generator.py` lines ~408-665
 
 ---
 
