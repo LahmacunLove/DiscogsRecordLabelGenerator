@@ -13,6 +13,7 @@ Provides real-time visualization of parallel worker threads with:
 """
 
 import sys
+import os
 import time
 import threading
 import logging
@@ -114,6 +115,10 @@ class ThreadMonitor:
         self.log_buffer = deque(maxlen=6)
         self.log_handler = None
 
+        # Stderr redirection to suppress Essentia C++ output
+        self.stderr_fd_backup = None
+        self.devnull_fd = None
+
         # Shutdown handling
         self.shutdown_requested = False
         self.shutdown_event = threading.Event()
@@ -152,7 +157,7 @@ class ThreadMonitor:
             self.log_buffer.append(f"[dim]{timestamp}[/dim] {message}")
 
     def install_log_handler(self):
-        """Install a custom log handler to capture messages"""
+        """Install a custom log handler to capture messages from all loggers"""
         from logger import logger as discogs_logger
 
         class BufferHandler(logging.Handler):
@@ -163,9 +168,14 @@ class ThreadMonitor:
             def emit(self, record):
                 try:
                     msg = self.format(record)
-                    # Strip the "LEVEL │ " prefix if present
+                    # Strip various logger prefixes
                     if " │ " in msg:
                         msg = msg.split(" │ ", 1)[1]
+                    elif msg.startswith("["):
+                        # Handle [   INFO   ] style prefixes from Essentia
+                        parts = msg.split("]", 1)
+                        if len(parts) > 1:
+                            msg = parts[1].strip()
                     self.monitor.add_log_message(msg)
                 except Exception:
                     pass
@@ -173,11 +183,15 @@ class ThreadMonitor:
         self.log_handler = BufferHandler(self)
         self.log_handler.setLevel(logging.INFO)
 
-        # Add to the discogs logger
+        # Add to BOTH the discogs logger AND the root logger to catch all messages
         discogs_logger.logger.addHandler(self.log_handler)
+        logging.root.addHandler(self.log_handler)
 
-        # Suppress console output by removing console handler temporarily
+        # Suppress console output by removing console handlers temporarily
         self.original_handlers = []
+        self.original_root_handlers = []
+
+        # Remove console handlers from discogs logger
         for handler in discogs_logger.logger.handlers[:]:
             if (
                 isinstance(handler, logging.StreamHandler)
@@ -186,18 +200,55 @@ class ThreadMonitor:
                 self.original_handlers.append(handler)
                 discogs_logger.logger.removeHandler(handler)
 
+        # Remove console handlers from root logger
+        for handler in logging.root.handlers[:]:
+            if isinstance(handler, logging.StreamHandler):
+                self.original_root_handlers.append(handler)
+                logging.root.removeHandler(handler)
+
+        # Redirect stderr at the file descriptor level to suppress Essentia C++ output
+        # This prevents [   INFO   ] messages from breaking the UI
+        try:
+            sys.stderr.flush()
+            self.stderr_fd_backup = os.dup(2)  # Backup stderr file descriptor
+            self.devnull_fd = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(self.devnull_fd, 2)  # Redirect stderr to /dev/null
+        except Exception as e:
+            # If redirection fails, continue without it
+            pass
+
     def remove_log_handler(self):
         """Remove the custom log handler and restore original handlers"""
         from logger import logger as discogs_logger
 
+        # Restore stderr at the file descriptor level
+        if self.stderr_fd_backup is not None:
+            try:
+                sys.stderr.flush()
+                os.dup2(self.stderr_fd_backup, 2)  # Restore original stderr
+                os.close(self.stderr_fd_backup)
+                if self.devnull_fd is not None:
+                    os.close(self.devnull_fd)
+            except Exception:
+                pass
+            self.stderr_fd_backup = None
+            self.devnull_fd = None
+
         if self.log_handler:
+            # Remove from both loggers
             discogs_logger.logger.removeHandler(self.log_handler)
+            logging.root.removeHandler(self.log_handler)
             self.log_handler = None
 
-        # Restore original console handlers
+        # Restore original console handlers to discogs logger
         for handler in self.original_handlers:
             discogs_logger.logger.addHandler(handler)
         self.original_handlers = []
+
+        # Restore original console handlers to root logger
+        for handler in self.original_root_handlers:
+            logging.root.addHandler(handler)
+        self.original_root_handlers = []
 
     def _build_display(self):
         """Build the display layout"""
