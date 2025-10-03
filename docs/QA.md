@@ -101,6 +101,97 @@ This document contains questions and answers about the codebase behavior and imp
 
 ## Audio Analysis
 
+### Q: What font should be used for PDF labels?
+
+**Asked:** 2025-01-10
+
+**Question:** What's the best, most loved font to use for PDF labels that's available across all platforms?
+
+**Answer:**
+
+The recommended font is **Inter** - a modern, professional font specifically designed for high readability at small sizes, making it perfect for labels.
+
+**Why Inter?**
+- Designed specifically for screens and small text (5-14pt)
+- #2 ranked font on Typewolf's "40 Best Google Fonts 2025"
+- 18.9k stars on GitHub - widely loved by designers
+- Free and open-source (SIL Open Font License)
+- Excellent Unicode support for international characters
+- Used by GitHub, Mozilla, and other major companies
+
+**Font Fallback Chain:**
+The PDF generator tries fonts in this order:
+1. **Inter** - Best choice for labels
+2. **Source Sans Pro** - Adobe's professional font
+3. **Fira Sans** - Mozilla's professional font
+4. **Liberation Sans** - Free Helvetica alternative
+5. **DejaVu Sans** - Good Unicode support
+6. **Helvetica** - Built-in PDF font (last resort)
+
+**Installation Instructions:**
+
+**Linux (Fedora/RHEL):**
+```bash
+# Download Inter from GitHub releases
+wget https://github.com/rsms/inter/releases/download/v4.0/Inter-4.0.zip
+unzip Inter-4.0.zip -d Inter
+sudo mkdir -p /usr/share/fonts/inter
+sudo cp Inter/Inter\ Desktop/*.ttf /usr/share/fonts/inter/
+sudo fc-cache -fv
+```
+
+**Linux (Ubuntu/Debian):**
+```bash
+# Install via package manager (if available)
+sudo apt install fonts-inter
+
+# Or install manually
+wget https://github.com/rsms/inter/releases/download/v4.0/Inter-4.0.zip
+unzip Inter-4.0.zip -d Inter
+sudo mkdir -p /usr/share/fonts/truetype/inter
+sudo cp Inter/Inter\ Desktop/*.ttf /usr/share/fonts/truetype/inter/
+sudo fc-cache -fv
+```
+
+**macOS:**
+```bash
+brew tap homebrew/cask-fonts
+brew install --cask font-inter
+```
+
+**Windows:**
+1. Download from https://github.com/rsms/inter/releases
+2. Extract the ZIP file
+3. Open the "Inter Desktop" folder
+4. Select all `.ttf` files, right-click, and choose "Install"
+
+**Verify Installation:**
+```bash
+fc-list | grep -i "inter"
+```
+
+**Alternative Fonts:**
+If Inter is not available, **Source Sans Pro** or **Fira Sans** are excellent alternatives:
+```bash
+# Fedora/RHEL
+sudo dnf install adobe-source-sans-pro-fonts mozilla-fira-sans-fonts
+
+# Ubuntu/Debian
+sudo apt install fonts-source-sans-pro fonts-fira-sans
+```
+
+**Relevant Files:**
+- `src/pdf_label_generator.py` (lines 35-132) - Font registration with fallback chain
+
+**Resources:**
+- [Inter Font Homepage](https://rsms.me/inter/)
+- [Inter on GitHub](https://github.com/rsms/inter)
+- [Typewolf Best Google Fonts 2025](https://www.typewolf.com/google-fonts)
+
+**Related Topics:** PDF generation, typography, label design, font selection
+
+---
+
 ### Q: What metadata fields should be used from Essentia analysis JSON for BPM and musical key?
 
 **Asked:** 2025-01-10

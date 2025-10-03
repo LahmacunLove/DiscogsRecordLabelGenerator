@@ -33,9 +33,64 @@ HORIZONTAL_GAP = 4 * mm  # Gap between columns
 
 
 def register_fonts():
-    """Register system fonts for ReportLab"""
+    """
+    Register system fonts for ReportLab with optimized fallback chain
+
+    Priority order:
+    1. Inter - Modern, designed for small sizes and high readability
+    2. Source Sans Pro - Professional Adobe font
+    3. Fira Sans - Mozilla's professional font
+    4. Liberation Sans - Free Helvetica alternative
+    5. DejaVu Sans - Fallback with good Unicode support
+    6. Helvetica - Built-in PDF font (last resort)
+    """
+    # Try Inter (most loved modern font, optimized for small sizes)
     try:
-        # Try to register Liberation Sans (Helvetica alternative)
+        pdfmetrics.registerFont(
+            TTFont("Inter", "/usr/share/fonts/inter/Inter-Regular.ttf")
+        )
+        pdfmetrics.registerFont(
+            TTFont("Inter-Bold", "/usr/share/fonts/inter/Inter-Bold.ttf")
+        )
+        logger.info("Using Inter font for PDF labels")
+        return "Inter"
+    except:
+        pass
+
+    # Try Source Sans Pro (Adobe, professional)
+    try:
+        pdfmetrics.registerFont(
+            TTFont(
+                "SourceSansPro",
+                "/usr/share/fonts/adobe-source-sans-pro/SourceSansPro-Regular.otf",
+            )
+        )
+        pdfmetrics.registerFont(
+            TTFont(
+                "SourceSansPro-Bold",
+                "/usr/share/fonts/adobe-source-sans-pro/SourceSansPro-Bold.otf",
+            )
+        )
+        logger.info("Using Source Sans Pro font for PDF labels")
+        return "SourceSansPro"
+    except:
+        pass
+
+    # Try Fira Sans (Mozilla, professional)
+    try:
+        pdfmetrics.registerFont(
+            TTFont("FiraSans", "/usr/share/fonts/fira-sans/FiraSans-Regular.otf")
+        )
+        pdfmetrics.registerFont(
+            TTFont("FiraSans-Bold", "/usr/share/fonts/fira-sans/FiraSans-Bold.otf")
+        )
+        logger.info("Using Fira Sans font for PDF labels")
+        return "FiraSans"
+    except:
+        pass
+
+    # Try Liberation Sans (Helvetica alternative)
+    try:
         pdfmetrics.registerFont(
             TTFont(
                 "LiberationSans",
@@ -48,25 +103,33 @@ def register_fonts():
                 "/usr/share/fonts/liberation-sans-fonts/LiberationSans-Bold.ttf",
             )
         )
+        logger.info("Using Liberation Sans font for PDF labels")
         return "LiberationSans"
     except:
-        try:
-            # Fallback to DejaVu Sans
-            pdfmetrics.registerFont(
-                TTFont(
-                    "DejaVuSans", "/usr/share/fonts/dejavu-sans-fonts/DejaVuSans.ttf"
-                )
+        pass
+
+    # Try DejaVu Sans (good Unicode support)
+    try:
+        pdfmetrics.registerFont(
+            TTFont("DejaVuSans", "/usr/share/fonts/dejavu-sans-fonts/DejaVuSans.ttf")
+        )
+        pdfmetrics.registerFont(
+            TTFont(
+                "DejaVuSans-Bold",
+                "/usr/share/fonts/dejavu-sans-fonts/DejaVuSans-Bold.ttf",
             )
-            pdfmetrics.registerFont(
-                TTFont(
-                    "DejaVuSans-Bold",
-                    "/usr/share/fonts/dejavu-sans-fonts/DejaVuSans-Bold.ttf",
-                )
-            )
-            return "DejaVuSans"
-        except:
-            # Use Helvetica as last resort (built-in)
-            return "Helvetica"
+        )
+        logger.info("Using DejaVu Sans font for PDF labels")
+        return "DejaVuSans"
+    except:
+        pass
+
+    # Use Helvetica as last resort (built-in to PDF)
+    logger.warning(
+        "No preferred fonts found, using Helvetica. Install Inter for best results: "
+        "https://github.com/rsms/inter/releases"
+    )
+    return "Helvetica"
 
 
 def truncate_text(text, max_length):
