@@ -8,6 +8,7 @@ This document provides guidelines for making changes to the DiscogsRecordLabelGe
 2. **Test Before Commit**: Always verify changes don't break the application
 3. **Document Dependencies**: Keep dependency lists accurate and up-to-date
 4. **Follow Python Best Practices**: Write clean, maintainable Python code
+5. **Document Code Analysis**: When analyzing code behavior or location, document findings in Q&A format
 
 ## Pre-Commit Checklist
 
@@ -56,6 +57,17 @@ If you added new imports:
 - Use clear, concise language
 - Provide examples for complex operations
 - Update troubleshooting section if you encounter common issues
+
+### Code Analysis and Q&A Documentation
+When a user asks about code behavior or where functionality is implemented:
+1. Perform thorough analysis of the codebase
+2. Provide a clear, detailed answer to the user
+3. Document the Q&A in `/docs/QA.md` for future reference
+4. Include:
+   - The question asked
+   - File paths and line numbers where relevant code exists
+   - Brief explanation of how the functionality works
+   - Any relevant context or related features
 
 ## Common Tasks
 

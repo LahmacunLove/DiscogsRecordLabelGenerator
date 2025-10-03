@@ -24,6 +24,7 @@ Technical documentation and development notes:
 
 - **[DEPENDENCY_NOTES.md](DEPENDENCY_NOTES.md)** - Dependency resolution and migration notes
 - **[PR_SYNC_CLI.md](PR_SYNC_CLI.md)** - CLI sync tool PR documentation
+- **[QA.md](QA.md)** - Code behavior Q&A and implementation details
 - **[Copilot Instructions](../.github/copilot-instructions.md)** - Development guidelines and testing workflows
 
 ## Assets
@@ -54,6 +55,7 @@ Sample outputs and images:
 - Review [Copilot Instructions](../.github/copilot-instructions.md) before contributing
 - Check [DEPENDENCY_NOTES.md](DEPENDENCY_NOTES.md) for dependency context
 - See [PR_SYNC_CLI.md](PR_SYNC_CLI.md) for CLI migration details
+- Browse [QA.md](QA.md) for code behavior and implementation Q&A
 
 ## Contributing
 
@@ -77,6 +79,7 @@ docs/
 ├── FILE_STRUCTURE.md         # Directory structure documentation
 ├── DEPENDENCY_NOTES.md       # Technical dependency notes
 ├── PR_SYNC_CLI.md           # CLI tool PR documentation
+├── QA.md                     # Code behavior Q&A
 └── assets/                   # Images and samples
     ├── sample.png
     ├── sample2.png
