@@ -530,14 +530,14 @@ class DiscogsLibraryMirror:
         # Get optimal workers for release processing (I/O intensive)
         if discogs_only:
             # For Discogs-only mode: limit workers due to API rate limits (60/min = 1/sec)
-            # Use fewer workers but still benefit from I/O concurrency
-            optimal_workers = min(3, max(1, len(releases_to_process) // 10))
+            # Use more workers for better I/O concurrency while staying under rate limits
+            optimal_workers = min(8, max(2, len(releases_to_process) // 5))
             logger.debug(
                 f"Discogs-only mode: using {optimal_workers} workers (rate limit: 60/min)"
             )
         else:
             optimal_workers, effective_cores, logical_cores, ht_detected = (
-                get_optimal_workers(min_workers=2, max_percentage=0.6)
+                get_optimal_workers(min_workers=2, max_percentage=0.85)
             )
 
             if ht_detected:
