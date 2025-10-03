@@ -632,6 +632,9 @@ class DiscogsLibraryMirror:
             console = Console()
 
             try:
+                # Install log handler to capture messages in the UI
+                monitor.install_log_handler()
+
                 with Live(
                     monitor._build_display(), console=console, refresh_per_second=2
                 ) as live:
@@ -680,6 +683,9 @@ class DiscogsLibraryMirror:
             except KeyboardInterrupt:
                 monitor._signal_handler(None, None)
                 console.print("\n[bold yellow]⚠️  Interrupted by user[/]")
+            finally:
+                # Remove log handler to restore normal logging
+                monitor.remove_log_handler()
 
         # Remove deleted releases
         # removed_ids = local_ids - discogs_ids
