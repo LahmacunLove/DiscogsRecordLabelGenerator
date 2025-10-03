@@ -13,6 +13,53 @@ The project provides several tools:
 
 All shell scripts in `bin/` automatically manage the virtual environment.
 
+## Multi-Threaded Processing
+
+### Live CLI Visualization
+
+When running sync operations in console mode, you'll see a real-time multi-threaded display showing:
+
+- **Individual Worker Panels**: Each worker thread gets its own panel showing:
+  - Current release being processed
+  - Processing step (e.g., "Downloading audio", "Analyzing audio")
+  - Progress percentage with visual bar
+  - Files generated so far
+  - Elapsed time for current task
+  - Status indicator (⚪ idle, 🟢 working, ✅ completed, 🔴 error)
+
+- **Overall Progress**: Header shows total progress, error count, worker count, and elapsed time
+
+- **Live Updates**: Display refreshes automatically as workers progress
+
+### Graceful Shutdown with Ctrl+C
+
+Press **Ctrl+C** at any time to safely stop all worker threads:
+
+1. Shutdown signal is sent to all workers
+2. Workers complete their current step and stop gracefully
+3. No partial or corrupted files are left behind
+4. Summary shows completed vs. total releases
+5. Any errors are reported
+
+**Example:**
+```
+⚠️ Ctrl+C detected - shutting down workers gracefully...
+⚠️ SHUTDOWN IN PROGRESS...
+
+⚠️ Shutdown completed
+Completed: 15/50
+```
+
+### Testing the Visualization
+
+Run the test script to see a demo with simulated releases:
+
+```bash
+python3 tests/test_monitor.py --releases 20 --workers 4
+```
+
+This simulates the mirroring process and lets you test the Ctrl+C shutdown behavior.
+
 ## sync.sh - Sync and Generate Labels
 
 The primary tool for syncing your Discogs collection and generating labels.

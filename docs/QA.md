@@ -12,6 +12,7 @@ This document contains questions and answers about the codebase behavior and imp
 - [Configuration](#configuration)
 - [API Integration](#api-integration)
 - [Audio Analysis](#audio-analysis)
+- [Multi-Threaded Processing](#multi-threaded-processing)
 
 ---
 
@@ -48,6 +49,26 @@ This document contains questions and answers about the codebase behavior and imp
 ## Audio Analysis
 
 *Questions about audio feature extraction and similarity analysis will be documented here.*
+
+---
+
+## Multi-Threaded Processing
+
+### Q: How does the multi-threaded CLI visualization work during sync operations?
+
+**A:** The sync process displays real-time progress for each worker thread in separate panels.
+
+**What you see:**
+- Per-worker panels showing current release, processing step, and progress bar
+- Files being generated in real-time
+- Overall statistics (completion %, errors, elapsed time)
+- Status indicators (⚪ idle, 🟢 working, ✅ completed, 🔴 error)
+
+**Graceful shutdown:** Press Ctrl+C at any time to stop all workers cleanly without corrupting files.
+
+**Try it:** Run `python3 tests/test_monitor.py` to see a demo with simulated releases.
+
+**Implementation:** Uses `ThreadMonitor` class in `src/thread_monitor.py`, integrated in `src/mirror.py`. See [detailed implementation notes](../.assistant/QA_DETAILED.md) for technical details.
 
 ---
 
