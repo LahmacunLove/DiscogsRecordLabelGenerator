@@ -225,7 +225,7 @@ class DiscogsLibraryMirror:
                         plotSpectogram=True,
                         debug=False,
                     )
-                    analyzer.readAudioFile(ffmpegUsage=False)
+                    analyzer.readAudioFile(ffmpegUsage=True)
                     analyzer.analyzeMusicExtractor()
 
                 # Perform waveform generation (independent task)
@@ -243,7 +243,7 @@ class DiscogsLibraryMirror:
                             plotSpectogram=False,  # No need for spectrograms
                             debug=False,
                         )
-                        analyzer.readAudioFile(ffmpegUsage=False)
+                        analyzer.readAudioFile(ffmpegUsage=True)
 
                     analyzer.generate_waveform_gnuplot()
 
@@ -1040,7 +1040,7 @@ class DiscogsLibraryMirror:
                         plotSpectogram=True,
                         debug=False,
                     )
-                    analyzer.readAudioFile(ffmpegUsage=False)
+                    analyzer.readAudioFile(ffmpegUsage=True)
                     analyzer.analyzeMusicExtractor()
 
                 # Perform waveform generation (independent task)
@@ -1056,7 +1056,7 @@ class DiscogsLibraryMirror:
                             plotSpectogram=False,  # No need for spectrograms
                             debug=False,
                         )
-                        analyzer.readAudioFile(ffmpegUsage=False)
+                        analyzer.readAudioFile(ffmpegUsage=True)
 
                     analyzer.generate_waveform_gnuplot()
 
