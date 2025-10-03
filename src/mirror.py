@@ -23,7 +23,6 @@ import shutil
 import re
 from logger import logger
 from cpu_utils import get_optimal_workers
-from latex_generator import create_latex_label_file
 from qr_generator import generate_qr_code_advanced
 from utils import sanitize_filename
 from tqdm import tqdm
@@ -962,7 +961,7 @@ class DiscogsLibraryMirror:
 
         if not download_only:
             if tracker:
-                tracker.update_step("Generating QR code", 85)
+                tracker.update_step("Generating QR code", 90)
             # create qr code with cover background
             generate_qr_code_advanced(
                 self.release_folder, release_id, metadata, tracker
@@ -972,12 +971,10 @@ class DiscogsLibraryMirror:
                 if qr_files:
                     tracker.add_file(str(qr_files[0]))
 
-            if tracker:
-                tracker.update_step("Creating LaTeX label", 95)
-            # create latex labels
-            create_latex_label_file(self.release_folder, metadata, tracker)
-            if tracker:
-                tracker.add_file(str(self.release_folder / "label.tex"))
+        if tracker:
+            tracker.update_step("Completed", 100)
+
+        logger.success(f"✅ Release {release_id} synchronized successfully")
 
     def regenerate_latex_label(self, release_id):
         """Regenerates only the LaTeX label for an existing release without sync operations"""
@@ -1191,8 +1188,7 @@ class DiscogsLibraryMirror:
                     # 2. QR code generation (both simple and fancy)
                     generate_qr_code_advanced(self.release_folder, release_id, metadata)
 
-                    # 3. Create/update LaTeX label
-                    create_latex_label_file(self.release_folder, metadata)
+                    # Note: LaTeX label creation removed - use generate_labels.py with ReportLab instead
 
                 except Exception as e:
                     logger.error(f"Error processing release {release_id} offline: {e}")
