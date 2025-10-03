@@ -636,7 +636,7 @@ class DiscogsLibraryMirror:
                 monitor.install_log_handler()
 
                 with Live(
-                    monitor._build_display(), console=console, refresh_per_second=2
+                    monitor._build_display(), console=console, refresh_per_second=10
                 ) as live:
                     with executor_class(max_workers=optimal_workers) as executor:
                         futures = [
