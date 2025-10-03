@@ -9,6 +9,7 @@ This document provides guidelines for making changes to the DiscogsRecordLabelGe
 3. **Document Dependencies**: Keep dependency lists accurate and up-to-date
 4. **Follow Python Best Practices**: Write clean, maintainable Python code
 5. **Document Code Analysis**: When analyzing code behavior or location, document findings in Q&A format
+6. **Commit Often with Component Prefixes**: Make frequent, focused commits with component-based prefixes to enable easy squashing later
 
 ## Pre-Commit Checklist
 
@@ -133,23 +134,90 @@ When encountering errors:
 
 ## Git Commit Messages
 
-Follow this format:
-```
-<Short summary (50 chars or less)>
+### Commit Convention
 
-- Bullet point describing change 1
-- Bullet point describing change 2
-- Note about testing performed
+**Commit often** with focused, atomic changes. Prefix each commit subject with a component name to enable easy identification and squashing of related commits later.
+
+**Important:** Focus on describing the **intent and impact** for reviewers, not specific code-level changes (e.g., avoid "Modified line 42 in foo.py"). Describe *what* and *why*, not *where*.
+
+**Format:**
+```
+component: Short summary (50 chars or less including prefix)
+
+- Describe the intent or user-facing impact
+- Explain why the change was needed
+- Note about testing performed (if applicable)
 ```
 
-Example:
-```
-Add support for multi-disc releases
+**Common Component Prefixes:**
+- `audio:` - Audio analysis, waveform generation, Essentia integration
+- `sync:` - Sync tool, data processing, release mirroring
+- `labels:` - Label generation, LaTeX templates, PDF output
+- `config:` - Configuration files, environment setup
+- `api:` - Discogs API integration, external API calls
+- `docs:` - Documentation updates, README changes
+- `tests:` - Test files, test utilities, CI
+- `deps:` - Dependency updates, requirements changes
+- `fix:` - Bug fixes (can be combined with component, e.g., `audio/fix:`)
+- `refactor:` - Code refactoring without functional changes
+- `build:` - Build scripts, deployment, packaging
 
-- Modified track parser to handle disc numbers
-- Updated LaTeX template for disc grouping
-- Tested with --dryrun and --dev modes
+**Examples:**
 ```
+audio: Add Opus-to-WAV conversion for Essentia
+
+- Enable analysis of Opus-encoded audio files
+- Essentia requires WAV format, so convert temporarily
+- Tested with --dryrun
+```
+
+```
+sync: Enable FFmpeg usage in track analysis
+
+- Allow decoding of modern audio codecs during sync
+- Fixes failure to analyze Opus and other formats
+```
+
+```
+docs: Document waveform generation lifecycle
+
+- Clarify when and where waveforms are created
+- Help users troubleshoot missing waveform files
+```
+
+```
+labels: Fix Unicode rendering in track titles
+
+- Correctly display international characters in labels
+- Resolves garbled text for non-ASCII titles
+- Tested with --max 5
+```
+
+**Squashing Related Commits:**
+
+When you have multiple related commits, they can be easily squashed during PR or rebase:
+```bash
+# Example: Squashing multiple audio-related commits
+git rebase -i HEAD~5
+
+# In the editor, you'll see:
+pick abc1234 audio: Add Opus detection
+pick def5678 audio: Implement WAV conversion
+pick ghi9012 audio: Add cleanup for temp files
+pick jkl3456 docs: Update audio analysis docs
+
+# Change to:
+pick abc1234 audio: Add Opus detection
+squash def5678 audio: Implement WAV conversion
+squash ghi9012 audio: Add cleanup for temp files
+pick jkl3456 docs: Update audio analysis docs
+```
+
+This convention makes it easy to:
+- Find all commits related to a specific component
+- Review changes by functional area
+- Squash related work into cohesive commits
+- Generate meaningful changelogs
 
 ## Pull Request Guidelines
 
