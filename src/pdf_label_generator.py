@@ -11,6 +11,7 @@ Supports Avery Zweckform L4744REV-65 format (96mm x 50.8mm, 2x5 grid on A4).
 
 import os
 import json
+import numpy as np
 from pathlib import Path
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm, inch
@@ -140,6 +141,125 @@ def truncate_text(text, max_length):
     if len(text) > max_length:
         return text[: max_length - 3] + "..."
     return text
+
+
+def draw_vector_waveform(c, x, y, width, height, audio_file_path):
+    """
+    Draw a simple, clean vector waveform directly in the PDF
+
+    Args:
+        c: ReportLab canvas
+        x, y: Bottom-left position
+        width, height: Dimensions in mm
+        audio_file_path: Path to audio file
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        import subprocess
+
+        # Use FFmpeg to get audio samples (much faster than loading full file)
+        # Downsample to ~200-400 points for clean, simple waveform
+        target_samples = 300
+
+        ffmpeg_cmd = [
+            "ffmpeg",
+            "-i",
+            str(audio_file_path),
+            "-ac",
+            "1",  # Mono
+            "-ar",
+            str(target_samples * 10),  # Sample rate for target points
+            "-f",
+            "f32le",  # 32-bit float
+            "-acodec",
+            "pcm_f32le",
+            "-t",
+            "30",  # Only first 30 seconds for speed
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-",
+        ]
+
+        # Get audio data
+        process = subprocess.Popen(
+            ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        audio_data, _ = process.communicate()
+
+        if not audio_data:
+            return False
+
+        # Convert to numpy array
+        samples = np.frombuffer(audio_data, dtype=np.float32)
+
+        if len(samples) == 0:
+            return False
+
+        # Downsample to target points by taking peaks
+        chunk_size = max(1, len(samples) // target_samples)
+        downsampled = []
+
+        for i in range(0, len(samples), chunk_size):
+            chunk = samples[i : i + chunk_size]
+            if len(chunk) > 0:
+                # Use RMS for smoother waveform
+                rms = np.sqrt(np.mean(chunk**2))
+                downsampled.append(rms)
+
+        if len(downsampled) < 2:
+            return False
+
+        # Normalize to -1 to 1 range
+        max_val = max(abs(min(downsampled)), abs(max(downsampled)))
+        if max_val > 0:
+            downsampled = [s / max_val for s in downsampled]
+
+        # Draw the waveform as vector paths
+        c.setStrokeColor(black)
+        c.setLineWidth(0.3)
+
+        # Calculate positions
+        num_points = len(downsampled)
+        x_step = width / num_points
+        y_center = y + height / 2
+        y_scale = height / 2 * 0.9  # Use 90% of height
+
+        # Draw waveform as a path (much cleaner than individual lines)
+        path = c.beginPath()
+
+        # Start from first point
+        first_x = x
+        first_y = y_center + (downsampled[0] * y_scale)
+        path.moveTo(first_x, first_y)
+
+        # Draw to each subsequent point
+        for i, amplitude in enumerate(downsampled):
+            point_x = x + (i * x_step)
+            point_y = y_center + (amplitude * y_scale)
+            path.lineTo(point_x, point_y)
+
+        # Draw the path
+        c.drawPath(path, stroke=1, fill=0)
+
+        # Optionally draw mirrored waveform below center for symmetry
+        path_mirror = c.beginPath()
+        path_mirror.moveTo(first_x, y_center - (downsampled[0] * y_scale))
+
+        for i, amplitude in enumerate(downsampled):
+            point_x = x + (i * x_step)
+            point_y = y_center - (amplitude * y_scale)
+            path_mirror.lineTo(point_x, point_y)
+
+        c.drawPath(path_mirror, stroke=1, fill=0)
+
+        return True
+
+    except Exception as e:
+        logger.debug(f"Could not generate vector waveform: {e}")
+        return False
 
 
 def draw_label(c, x, y, metadata, release_folder, font_family):
@@ -297,21 +417,41 @@ def draw_label(c, x, y, metadata, release_folder, font_family):
             if key:
                 c.drawString(col_pos + 58 * mm, row_y, key)
 
-            # Draw waveform if available
-            waveform_path = Path(release_folder) / f"{position}_waveform.png"
-            if waveform_path.exists():
-                try:
-                    c.drawImage(
-                        str(waveform_path),
-                        col_pos + 70 * mm,
-                        row_y - 0.5 * mm,
-                        width=18 * mm,
-                        height=3 * mm,
-                        preserveAspectRatio=True,
-                        anchor="sw",
-                    )
-                except Exception as e:
-                    logger.debug(f"Could not load waveform: {e}")
+            # Draw waveform - try vector first, fallback to PNG
+            waveform_x = col_pos + 70 * mm
+            waveform_y = row_y - 0.5 * mm
+            waveform_width = 18 * mm
+            waveform_height = 3 * mm
+
+            # Try to find audio file for vector waveform
+            audio_file = None
+            for ext in [".opus", ".flac", ".mp3", ".m4a", ".wav"]:
+                audio_path = Path(release_folder) / f"{position}{ext}"
+                if audio_path.exists():
+                    audio_file = audio_path
+                    break
+
+            # Try vector waveform first (crisp, no pixelation)
+            if audio_file and draw_vector_waveform(
+                c, waveform_x, waveform_y, waveform_width, waveform_height, audio_file
+            ):
+                pass  # Successfully drew vector waveform
+            else:
+                # Fallback to PNG waveform if available
+                waveform_path = Path(release_folder) / f"{position}_waveform.png"
+                if waveform_path.exists():
+                    try:
+                        c.drawImage(
+                            str(waveform_path),
+                            waveform_x,
+                            waveform_y,
+                            width=waveform_width,
+                            height=waveform_height,
+                            preserveAspectRatio=True,
+                            anchor="sw",
+                        )
+                    except Exception as e:
+                        logger.debug(f"Could not load waveform: {e}")
 
     # Draw QR code if available (top-right corner)
     qr_path = Path(release_folder) / "qrcode.png"

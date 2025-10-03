@@ -101,6 +101,56 @@ This document contains questions and answers about the codebase behavior and imp
 
 ## Audio Analysis
 
+### Q: How are waveforms generated for PDF labels to avoid pixelation?
+
+**Asked:** 2025-01-10
+
+**Question:** Is there a way to create simpler waveforms that don't get pixelated when printed at low resolution on labels?
+
+**Answer:**
+
+Yes! The PDF label generator now uses **vector waveform drawing** for crisp, non-pixelated waveforms at any print resolution.
+
+**Vector Waveform Features:**
+- **Pure vector graphics** - drawn directly in PDF using ReportLab paths
+- **No pixelation** - scales perfectly at any resolution (300dpi, 600dpi, etc.)
+- **Simpler design** - clean, smooth waveform optimized for small sizes
+- **Faster generation** - no need to create/store PNG files
+- **Automatic fallback** - uses PNG waveforms if audio file not available
+
+**How it works:**
+1. Uses FFmpeg to extract audio samples (first 30 seconds)
+2. Downsamples to ~300 points for clean, simple visualization
+3. Calculates RMS (root mean square) for smooth amplitude
+4. Draws waveform as vector paths directly in PDF
+5. Creates symmetrical mirrored waveform for visual balance
+
+**Technical Details:**
+- Waveform dimensions: 18mm × 3mm
+- Line width: 0.3pt for crisp printing
+- Uses 90% of available height for scaling
+- Supports all audio formats (Opus, FLAC, MP3, M4A, WAV)
+
+**Advantages over PNG waveforms:**
+- ✅ No pixelation at any print resolution
+- ✅ Smaller PDF file sizes (vector vs raster)
+- ✅ No external image dependencies
+- ✅ Cleaner, more professional appearance
+- ✅ Faster PDF generation (no image loading)
+
+**Fallback Behavior:**
+If audio file is not found, the system falls back to PNG waveform files (`{position}_waveform.png`) if available.
+
+**Relevant Files:**
+- `src/pdf_label_generator.py` (lines 144-260) - Vector waveform drawing function
+- `src/pdf_label_generator.py` (lines 420-453) - Waveform rendering with fallback
+
+**Related Topics:** PDF generation, waveform visualization, print quality, vector graphics
+
+---
+
+## Audio Analysis
+
 ### Q: What font should be used for PDF labels?
 
 **Asked:** 2025-01-10
