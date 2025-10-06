@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-LaTeX Label Master Document Generator
+PDF Label Generator using ReportLab
 
-Generiert druckfertige PDF-Labels aus Discogs Release-Daten
-Basierend auf der originalen combineLatex Funktion
+Generates print-ready PDF labels directly from Discogs release data.
+No LaTeX dependency required.
 
 Usage:
-    python generate_labels.py                       # Alle Labels
-    python generate_labels.py --dev                 # Erste 10 Labels (Development)
-    python generate_labels.py --max 15              # Erste 15 Labels
-    python generate_labels.py --output /tmp         # Custom Output-Pfad
-    python generate_labels.py --release-id 12345    # Einzelnes Label
-    python generate_labels.py --since 2024-12-01    # Labels seit Datum
+    python generate_labels.py                       # All labels
+    python generate_labels.py --dev                 # First 10 labels (Development)
+    python generate_labels.py --max 15              # First 15 labels
+    python generate_labels.py --output /tmp         # Custom output path
+    python generate_labels.py --release-id 12345    # Single label
+    python generate_labels.py --since 2024-12-01    # Labels since date
 
 @author: ffx
 """
@@ -26,14 +26,13 @@ from pathlib import Path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from config import load_config
-from latex_generator import combine_latex_labels
+from pdf_label_generator import create_label_pdf
 from logger import logger
-from tqdm import tqdm
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate printable LaTeX labels from Discogs releases",
+        description="Generate printable PDF labels from Discogs releases",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
@@ -69,7 +68,7 @@ def main():
         "--output",
         type=str,
         default=None,
-        help="Output directory for LaTeX and PDF files (default: parent dir of library)",
+        help="Output directory for PDF files (default: parent dir of library)",
     )
 
     parser.add_argument(
@@ -77,12 +76,6 @@ def main():
         type=str,
         default=None,
         help="Path to Discogs library (default: from config)",
-    )
-
-    parser.add_argument(
-        "--compile-pdf",
-        action="store_true",
-        help="Force PDF compilation even if pdflatex not found",
     )
 
     args = parser.parse_args()
@@ -113,7 +106,7 @@ def main():
             # TODO: Für finale Version wieder Zeitstempel aktivieren
             output_dir = library_path.parent / "vinyl_labels"
 
-        logger.separator("LaTeX Label Generation")
+        logger.separator("PDF Label Generation")
         logger.info(f"Library path: {library_path}")
         logger.info(f"Output directory: {output_dir}")
 
@@ -132,8 +125,8 @@ def main():
         if args.since:
             logger.info(f"Generating labels for releases added since: {args.since}")
 
-        # Generiere Master-Dokument
-        success = combine_latex_labels(
+        # Generate PDF labels
+        success = create_label_pdf(
             library_path=str(library_path),
             output_dir=str(output_dir),
             max_labels=limit,
@@ -144,24 +137,15 @@ def main():
         if success:
             logger.separator("Generation Complete")
 
-            # Zeige generierte Dateien
-            tex_files = list(output_dir.glob("*.tex"))
+            # Show generated files
             pdf_files = list(output_dir.glob("*.pdf"))
-
-            for tex_file in tex_files:
-                logger.success(f"📄 LaTeX: {tex_file}")
 
             if pdf_files:
                 for pdf_file in pdf_files:
                     logger.success(f"📋 PDF: {pdf_file}")
                 logger.info("🖨️  Ready for printing!")
             else:
-                logger.info("💡 Install pdflatex to auto-generate PDF")
-                if tex_files:
-                    tex_name = tex_files[0].stem
-                    logger.info(
-                        f"Manual compilation: cd {output_dir} && pdflatex {tex_name}.tex"
-                    )
+                logger.warning("No PDF files generated")
 
         else:
             logger.error("Label generation failed")

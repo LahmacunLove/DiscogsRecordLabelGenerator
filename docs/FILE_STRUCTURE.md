@@ -10,12 +10,10 @@ DiscogsRecordLabelGenerator/
 │   ├── _common.sh               # Shared functions for scripts
 │   ├── setup.sh                 # Interactive configuration wizard
 │   ├── sync.sh                  # Sync and label generation wrapper
-│   ├── main.sh                  # Main processing wrapper
 │   └── generate-labels.sh       # Label generation wrapper
 ├── scripts/                      # Python entry points
 │   ├── setup.py                 # Setup script
 │   ├── sync.py                  # Sync CLI tool
-│   ├── main.py                  # Main processing script
 │   ├── generate_labels.py       # Label generation script
 │   ├── cleanup_duplicates.py    # Duplicate cleanup utility
 │   └── similarity_analyzer.py   # Audio similarity analyzer
@@ -236,8 +234,8 @@ Structure:
 Final output: Printable PDF with all labels.
 
 Features:
-- Formatted for 8163 shipping labels
-- Multiple labels per page
+- Formatted for Avery Zweckform L4744REV-65 labels (96 x 50.8 mm on A4 paper)
+- 10 labels per page (2 columns x 5 rows)
 - Ready to print
 
 ## Configuration Directory

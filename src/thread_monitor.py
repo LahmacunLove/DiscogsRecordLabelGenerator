@@ -25,6 +25,8 @@ from rich.table import Table
 from rich.panel import Panel
 from rich.layout import Layout
 from rich.text import Text
+from rich.columns import Columns
+from rich.console import Group
 from rich.progress import (
     Progress,
     SpinnerColumn,
@@ -49,6 +51,7 @@ class WorkerState:
         self.status = "idle"  # idle, working, completed, error
         self.error_message = None
         self.total_processed = 0
+        self.overall_index = None  # Overall position in import order
 
     def update(
         self,
@@ -59,6 +62,7 @@ class WorkerState:
         file_generated=None,
         status=None,
         error=None,
+        overall_index=None,
     ):
         """Update worker state"""
         if release_id is not None:
@@ -67,6 +71,8 @@ class WorkerState:
                 self.start_time = time.time()
         if release_title is not None:
             self.release_title = release_title
+        if overall_index is not None:
+            self.overall_index = overall_index
         if step is not None:
             self.current_step = step
         if progress is not None:
@@ -82,6 +88,7 @@ class WorkerState:
                 self.current_step = "Waiting..."
                 self.release_title = "Idle"
                 self.start_time = None
+                # Keep overall_index for display until next release starts
         if error is not None:
             self.error_message = error
             self.status = "error"
@@ -110,6 +117,7 @@ class ThreadMonitor:
         self.completed_count = 0
         self.error_count = 0
         self.start_time = time.time()
+        self.next_overall_index = 1  # Track next index for releases
 
         # Log buffer for capturing messages (last 6 messages)
         self.log_buffer = deque(maxlen=6)
@@ -127,12 +135,12 @@ class ThreadMonitor:
         signal.signal(signal.SIGINT, self._signal_handler)
 
     def _signal_handler(self, signum, frame):
-        """Handle Ctrl+C gracefully"""
+        """Handle Ctrl+C by immediately terminating all workers"""
         self.console.print(
-            "\n[bold yellow]⚠️  Ctrl+C detected - shutting down workers gracefully...[/]"
+            "\n[bold red]⚠️  Ctrl+C detected - terminating immediately...[/]"
         )
-        self.shutdown_requested = True
-        self.shutdown_event.set()
+        # Force immediate exit - all worker threads/processes will be terminated
+        os._exit(130)  # Standard exit code for SIGINT
 
     def is_shutdown_requested(self):
         """Check if shutdown has been requested"""
@@ -142,6 +150,15 @@ class ThreadMonitor:
         """Update state for a specific worker"""
         with self.lock:
             if worker_id in self.workers:
+                # Assign overall index when starting new work (new release_id)
+                if kwargs.get("release_id") is not None:
+                    current_release = self.workers[worker_id].release_id
+                    new_release = kwargs.get("release_id")
+                    # Only assign new index if this is a different release
+                    if current_release != new_release:
+                        kwargs["overall_index"] = self.next_overall_index
+                        self.next_overall_index += 1
+
                 self.workers[worker_id].update(**kwargs)
 
                 # Update overall counters
@@ -258,7 +275,7 @@ class ThreadMonitor:
         layout.split_column(
             Layout(name="header", size=5),
             Layout(name="workers", ratio=1),
-            Layout(name="logs", size=10),
+            Layout(name="logs", size=6),
             Layout(name="footer", size=3),
         )
 
@@ -293,24 +310,24 @@ class ThreadMonitor:
 
         layout["header"].update(Panel(header_text, border_style="cyan"))
 
-        # Worker panels
-        worker_table = Table.grid(padding=(0, 1))
-
-        # Determine grid layout (2 columns for better readability)
-        cols = 2 if self.num_workers > 2 else 1
-        rows_needed = (self.num_workers + cols - 1) // cols
+        # Worker table with all workers as rows
+        worker_table = Table(
+            show_header=True,
+            header_style="bold cyan",
+            border_style="dim",
+            expand=True,
+        )
+        worker_table.add_column("", width=2, no_wrap=True)  # Status icon
+        worker_table.add_column("#", width=3, style="yellow", no_wrap=True)
+        worker_table.add_column("Release", width=18, style="white", no_wrap=True)
+        worker_table.add_column("Progress", width=10, style="green", no_wrap=True)
+        worker_table.add_column("Time", width=3, style="yellow", no_wrap=True)
+        worker_table.add_column("Step", style="cyan", no_wrap=False)
 
         with self.lock:
-            for row in range(rows_needed):
-                row_panels = []
-                for col in range(cols):
-                    worker_idx = row * cols + col
-                    if worker_idx < self.num_workers:
-                        worker = self.workers[worker_idx]
-                        row_panels.append(self._build_worker_panel(worker))
-                    else:
-                        row_panels.append(Panel("", border_style="dim"))
-                worker_table.add_row(*row_panels)
+            for worker_id in sorted(self.workers.keys()):
+                worker = self.workers[worker_id]
+                self._add_worker_row(worker_table, worker)
 
         layout["workers"].update(worker_table)
 
@@ -336,85 +353,71 @@ class ThreadMonitor:
 
         return layout
 
-    def _build_worker_panel(self, worker):
-        """Build display panel for a single worker"""
+    def _add_worker_row(self, table, worker):
+        """Add a worker row to the table"""
         # Status indicator
         status_icons = {"idle": "⚪", "working": "🟢", "completed": "✅", "error": "🔴"}
         status_icon = status_icons.get(worker.status, "⚪")
 
-        # Progress bar
-        bar_width = 20
-        filled = int(worker.progress_percent / 100 * bar_width)
-        bar = "█" * filled + "░" * (bar_width - filled)
+        # Index column - show overall index if working, otherwise worker ID
+        if worker.status == "working" and worker.overall_index is not None:
+            index_text = f"#{worker.overall_index}"
+        else:
+            index_text = f"#{worker.worker_id}"
 
-        # Build content
-        content = Text()
-
-        # Title with status
-        content.append(f"{status_icon} Worker {worker.worker_id}", style="bold cyan")
-        content.append(f" │ Completed: {worker.total_processed}\n", style="dim")
-
+        # Release column
         if worker.status == "working":
-            # Release info
-            content.append(f"Release: ", style="dim")
-            content.append(f"{worker.release_id}", style="bold yellow")
-            content.append("\n")
-
             title_display = (
-                worker.release_title[:40] + "..."
-                if len(worker.release_title) > 40
+                worker.release_title[:22] + ".."
+                if len(worker.release_title) > 22
                 else worker.release_title
             )
-            content.append(f"Title: ", style="dim")
-            content.append(f"{title_display}", style="white")
-            content.append("\n")
-
-            # Current step
-            content.append(f"Step: ", style="dim")
-            content.append(f"{worker.current_step}\n", style="cyan")
-
-            # Progress bar
-            content.append(f"[{bar}] {worker.progress_percent:.0f}%\n", style="green")
-
-            # Elapsed time
-            elapsed = worker.get_elapsed_time()
-            content.append(f"Time: {int(elapsed)}s\n", style="yellow")
-
-            # Generated files (last 3)
-            if worker.files_generated:
-                content.append("Files: ", style="dim")
-                recent_files = worker.files_generated[-3:]
-                for i, file in enumerate(recent_files):
-                    file_display = file.split("/")[-1][:30]
-                    if i > 0:
-                        content.append("       ", style="dim")
-                    content.append(f"• {file_display}\n", style="green")
-
+            release_text = f"{title_display} [{worker.release_id}]"
         elif worker.status == "error":
-            content.append(
-                f"❌ Error in release {worker.release_id}\n", style="bold red"
+            release_text = f"Error: {worker.release_id}"
+        else:
+            release_text = "Idle"
+
+        # Progress column (bar with percentage)
+        if worker.status == "working":
+            bar_width = 6
+            filled = int(worker.progress_percent / 100 * bar_width)
+            bar = "█" * filled + "░" * (bar_width - filled)
+            progress_text = f"[{bar}] {worker.progress_percent:3.0f}%"
+        elif worker.status == "error":
+            progress_text = "Error"
+        else:
+            progress_text = "—"
+
+        # Time column
+        if worker.status == "working":
+            elapsed = worker.get_elapsed_time()
+            time_text = f"{int(elapsed)}s"
+        else:
+            time_text = "—"
+
+        # Step column
+        if worker.status == "working":
+            step_display = (
+                worker.current_step[:40] + ".."
+                if len(worker.current_step) > 40
+                else worker.current_step
             )
-            if worker.error_message:
-                error_display = (
-                    worker.error_message[:60] + "..."
-                    if len(worker.error_message) > 60
-                    else worker.error_message
-                )
-                content.append(f"{error_display}\n", style="red")
+            step_text = step_display
+        elif worker.status == "error" and worker.error_message:
+            error_display = (
+                worker.error_message[:40] + ".."
+                if len(worker.error_message) > 40
+                else worker.error_message
+            )
+            step_text = f"❌ {error_display}"
+        else:
+            step_text = "Waiting..."
 
-        elif worker.status == "idle":
-            content.append("Waiting for work...\n", style="dim italic")
-
-        # Panel styling based on status
-        border_styles = {
-            "idle": "dim",
-            "working": "green",
-            "completed": "blue",
-            "error": "red",
-        }
-        border_style = border_styles.get(worker.status, "dim")
-
-        return Panel(content, border_style=border_style, padding=(0, 1))
+        # Add the row
+        table.add_row(
+            status_icon, index_text, release_text, progress_text, time_text, step_text
+        )
 
     def run_with_live_display(
         self, executor_func, releases, process_func, *process_args

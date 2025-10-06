@@ -29,9 +29,6 @@ This will:
 # Generate labels only
 ./bin/sync.sh --labels-only
 
-# Run main application
-./bin/main.sh --dev
-
 # Generate labels from existing data
 ./bin/generate-labels.sh --max 10
 ```
@@ -86,44 +83,6 @@ Modern CLI tool for syncing your Discogs library and generating labels.
 - `--labels-only` - Skip sync, generate labels only
 - `--max N` - Limit to N releases
 - `--configure` - Save configuration
-
----
-
-### `main.sh`
-**Main application (legacy mode)**
-
-Runs the original main.py with full sync and analysis features.
-
-```bash
-# Show all options
-./bin/main.sh --help
-
-# Development mode
-./bin/main.sh --dev
-
-# Full sync
-./bin/main.sh
-
-# Dry run mode
-./bin/main.sh --dryrun
-
-# Process specific release
-./bin/main.sh --release-id 123456
-
-# Download only (no analysis)
-./bin/main.sh --download-only
-
-# Discogs metadata only
-./bin/main.sh --discogs-only
-```
-
-**Key Options:**
-- `--dev` - Development mode (10 releases)
-- `--dryrun` - Offline processing of existing releases
-- `--download-only` - Skip analysis
-- `--discogs-only` - Metadata and covers only
-- `--regenerate-labels` - Regenerate labels without download
-- `--regenerate-waveforms` - Regenerate waveforms
 
 ---
 
@@ -183,13 +142,11 @@ DiscogsRecordLabelGenerator/
 ├── bin/                    # Shell scripts (you are here)
 │   ├── setup.sh           # Setup wizard
 │   ├── sync.sh            # Sync tool
-│   ├── main.sh            # Main application
 │   ├── generate-labels.sh # Label generator
 │   └── _common.sh         # Shared functions
 ├── scripts/               # Python entry points
 │   ├── setup.py
 │   ├── sync.py
-│   ├── main.py
 │   └── generate_labels.py
 ├── src/                   # Library code
 │   ├── config.py
@@ -246,14 +203,12 @@ chmod +x bin/*.sh
 **Before:**
 ```bash
 source venv/bin/activate
-python3 main.py --dev
-python3 sync.py --dryrun
+python3 sync.py --dev
 ```
 
 **After:**
 ```bash
-./bin/main.sh --dev
-./bin/sync.sh --dryrun
+./bin/sync.sh --dev
 ```
 
 Much simpler! No manual venv activation needed.

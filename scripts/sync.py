@@ -21,7 +21,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from config import load_config, get_config_path
 from mirror import DiscogsLibraryMirror
 from logger import logger
-from latex_generator import combine_latex_labels
 
 
 def create_config(token, library_path, bandcamp_path=None):
@@ -66,6 +65,9 @@ def sync_library(mode="dev", max_releases=None, dryrun=False):
     logger.separator("Starting Library Sync")
     logger.info(f"Mode: {mode}")
 
+    # Start error tracking
+    logger.start_sync()
+
     if dryrun:
         logger.info("DRY RUN MODE: No API calls or downloads will be made")
 
@@ -87,7 +89,7 @@ def sync_library(mode="dev", max_releases=None, dryrun=False):
             logger.success("Dry run processing completed")
         else:
             mirror.sync_releases(max_releases=max_releases)
-            logger.success("Library sync completed successfully")
+            logger.success("✅ Library sync completed successfully")
 
         return mirror
     except KeyboardInterrupt:
@@ -96,17 +98,21 @@ def sync_library(mode="dev", max_releases=None, dryrun=False):
     except Exception as e:
         logger.error(f"Sync failed: {e}")
         raise
+    finally:
+        # Generate error summary report
+        logger.generate_error_summary()
 
 
 def generate_labels(
     mirror, output_dir=None, max_labels=None, specific_release=None, since_date=None
 ):
-    """Generate LaTeX labels from synced library"""
+    """Generate PDF labels from synced library using ReportLab"""
     if not mirror:
         logger.error("No mirror available for label generation")
         return False
 
     logger.separator("Generating Labels")
+    logger.info("Starting PDF label generation process...")
 
     # Use library path from the mirror
     library_path = str(mirror.library_path)
@@ -116,32 +122,40 @@ def generate_labels(
 
     logger.info(f"Output directory: {output_dir}")
 
-    # Generate master document with all labels
-    success = combine_latex_labels(
-        library_path=library_path,
-        output_dir=output_dir,
-        max_labels=max_labels,
-        specific_release=specific_release,
-        since_date=since_date,
-    )
+    # Import PDF generator
+    try:
+        from pdf_label_generator import create_label_pdf
 
-    if success:
-        logger.success("📋 Labels generated successfully!")
-        logger.info(f"📁 Output: {output_dir}")
+        # Generate PDF labels
+        success = create_label_pdf(
+            library_path=library_path,
+            output_dir=output_dir,
+            max_labels=max_labels,
+            specific_release=specific_release,
+            since_date=since_date,
+        )
 
-        # Check for generated files
-        output_path = Path(output_dir)
-        tex_files = list(output_path.glob("*.tex"))
-        pdf_files = list(output_path.glob("*.pdf"))
+        if success:
+            logger.success("📋 PDF labels generated successfully!")
+            logger.info(f"📁 Output: {output_dir}")
+            logger.info("Label generation phase complete")
 
-        if tex_files:
-            logger.info(f"Generated {len(tex_files)} LaTeX files")
-        if pdf_files:
-            logger.info(f"Generated {len(pdf_files)} PDF files")
-    else:
-        logger.error("Label generation failed")
+            # Check for generated files
+            output_path = Path(output_dir)
+            pdf_files = list(output_path.glob("*.pdf"))
 
-    return success
+            if pdf_files:
+                logger.info(f"Generated {len(pdf_files)} PDF files")
+                logger.info("🖨️  Ready for printing!")
+        else:
+            logger.error("Label generation failed")
+
+        return success
+
+    except ImportError as e:
+        logger.error(f"Failed to import PDF generator: {e}")
+        logger.info("Install reportlab: pip install reportlab")
+        return False
 
 
 def main():
@@ -268,11 +282,13 @@ Examples:
 
             if not mirror:
                 return 1
+
+            logger.info("Sync phase complete. Moving to label generation...")
         except Exception as e:
             logger.error(f"Sync failed: {e}")
             return 1
 
-    # Generate labels
+    # Generate labels (this may take a while for large collections)
     if args.labels or args.labels_only:
         # For labels-only mode, need to load the mirror
         if args.labels_only and not mirror:

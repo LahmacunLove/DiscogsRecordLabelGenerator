@@ -341,8 +341,8 @@ xelatex --version
    - Check network/firewall settings
 
 3. **Download-only mode:**
-   - If using `--download-only`, audio is downloaded but not analyzed
-   - Run `./bin/main.sh` to complete processing
+   - Audio download and analysis are part of the sync process
+   - Use `./bin/sync.sh` for full processing
 
 ### Analysis Data Missing
 
@@ -352,10 +352,10 @@ xelatex --version
 
 ```bash
 # Rerun analysis
-./bin/main.sh --max 10  # Test with small batch first
+./bin/sync.sh --max 10  # Test with small batch first
 
 # Check for errors
-./bin/main.sh --dev 2>&1 | tee error.log
+./bin/sync.sh --dev 2>&1 | tee error.log
 ```
 
 **If Essentia errors occur:**
@@ -375,8 +375,8 @@ xelatex --version
 sudo apt install gnuplot  # Ubuntu/Debian
 brew install gnuplot      # macOS
 
-# Regenerate waveforms
-./bin/main.sh --regenerate-waveforms
+# Reprocess releases to regenerate waveforms
+./bin/sync.sh --dryrun --max 10
 ```
 
 ### Labels Not Generated
@@ -398,7 +398,7 @@ brew install gnuplot      # macOS
 
 3. **Regenerate labels:**
    ```bash
-   ./bin/main.sh --regenerate-labels --max 5
+   ./bin/sync.sh --labels-only --max-labels 5
    ```
 
 4. **Test with single release:**
@@ -426,7 +426,7 @@ brew install gnuplot      # macOS
 
 3. **Skip analysis temporarily:**
    ```bash
-   ./bin/main.sh --download-only
+   ./bin/sync.sh --dryrun
    ```
 
 4. **Check system resources:**
@@ -543,7 +543,6 @@ source venv/bin/activate
 
 # Run with Python directly for better error messages
 python3 scripts/sync.py --dev
-python3 scripts/main.py --dryrun
 python3 scripts/generate_labels.py --max 1
 ```
 

@@ -93,9 +93,6 @@ Progress: 15/50 (30.0%) │ Errors: 1 │ Workers: 4 │ Time: 5m 23s
 # Sync your collection
 ./bin/sync.sh [--dev|--dryrun] [--labels] [--max N]
 
-# Process existing releases
-./bin/main.sh [--dev|--dryrun] [--download-only] [--max N]
-
 # Generate labels only
 ./bin/generate-labels.sh [--max N] [--output DIR]
 
@@ -122,7 +119,7 @@ Each release creates a directory with:
 - QR codes (plain and fancy)
 - LaTeX label snippets
 
-Labels are compiled into PDFs in `output_labels/`, formatted for 8163 shipping labels.
+Labels are compiled into PDFs in `output_labels/`, formatted for **Avery Zweckform L4744REV-65** labels (96 x 50.8 mm on A4 paper, 10 labels per sheet).
 
 ## License
 

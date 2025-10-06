@@ -136,7 +136,71 @@ def get_library_path():
         return str(path)
 
 
-def create_config_file(token, library_path):
+def get_youtube_cookies_browser():
+    """Prompt user for YouTube cookies browser configuration."""
+    print_section("YouTube Authentication (Optional)")
+    print(
+        "YouTube often blocks automated requests with 'Sign in to confirm you're not a bot'."
+    )
+    print()
+    print(
+        "To bypass this, we can use cookies from your browser where you're signed into YouTube."
+    )
+    print()
+    print("Supported browsers:")
+    print("  • firefox")
+    print("  • chrome")
+    print("  • chromium")
+    print("  • edge")
+    print("  • brave")
+    print("  • opera")
+    print("  • safari (macOS only)")
+    print()
+    print("⚠️  Requirements:")
+    print("  1. You must be signed into YouTube in the browser you choose")
+    print("  2. yt-dlp must be up to date: pip install -U yt-dlp")
+    print()
+
+    while True:
+        browser = input("Enter browser name (or press Enter to skip): ").strip().lower()
+
+        # Allow skipping
+        if not browser:
+            print(
+                "⏭️  Skipping YouTube authentication (you may see bot detection errors)"
+            )
+            return None
+
+        # Validate browser choice
+        valid_browsers = [
+            "firefox",
+            "chrome",
+            "chromium",
+            "edge",
+            "brave",
+            "opera",
+            "safari",
+        ]
+        if browser not in valid_browsers:
+            print(
+                f"❌ Invalid browser. Please choose from: {', '.join(valid_browsers)}"
+            )
+            print()
+            continue
+
+        # Confirm
+        print(f"✅ Will use cookies from: {browser}")
+        print()
+        print(f"⚠️  Make sure you're signed into YouTube in {browser.title()}!")
+        response = input("Is this correct? [Y/n]: ").strip().lower()
+        if response in ["n", "no"]:
+            print()
+            continue
+
+        return browser
+
+
+def create_config_file(token, library_path, youtube_cookies_browser=None):
     """Create the configuration file."""
     print_section("Creating Configuration")
 
@@ -153,6 +217,10 @@ def create_config_file(token, library_path):
 
     # Create configuration data
     config_data = {"DISCOGS_USER_TOKEN": token, "LIBRARY_PATH": library_path}
+
+    # Add YouTube cookies browser if configured
+    if youtube_cookies_browser:
+        config_data["YOUTUBE_COOKIES_BROWSER"] = youtube_cookies_browser
 
     # Write configuration file
     try:
@@ -217,9 +285,10 @@ def main():
         # Get configuration from user
         token = get_discogs_token()
         library_path = get_library_path()
+        youtube_cookies_browser = get_youtube_cookies_browser()
 
         # Create configuration file
-        if not create_config_file(token, library_path):
+        if not create_config_file(token, library_path, youtube_cookies_browser):
             print()
             print("❌ Setup failed. Please try again.")
             sys.exit(1)

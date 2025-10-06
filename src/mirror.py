@@ -23,7 +23,6 @@ import shutil
 import re
 from logger import logger
 from cpu_utils import get_optimal_workers
-from latex_generator import create_latex_label_file
 from qr_generator import generate_qr_code_advanced
 from utils import sanitize_filename
 from tqdm import tqdm
@@ -46,8 +45,11 @@ class DiscogsLibraryMirror:
             raise ValueError("Discogs token missing in config.")
         return discogs_client.Client("DiscogsDBLabelGen/0.1", user_token=token)
 
-    def find_bandcamp_release(self, metadata):
+    def find_bandcamp_release(self, metadata, tracker=None):
         """Find matching Bandcamp release using catalog numbers, artist, and title"""
+        if tracker:
+            tracker.update_step("Searching Bandcamp library", 36)
+
         bandcamp_path = self.config.get("BANDCAMP_PATH")
         if not bandcamp_path:
             logger.debug("No BANDCAMP_PATH configured")
@@ -129,8 +131,13 @@ class DiscogsLibraryMirror:
         )
         return audio_files
 
-    def copy_bandcamp_audio_to_release_folder(self, bandcamp_folder, metadata):
+    def copy_bandcamp_audio_to_release_folder(
+        self, bandcamp_folder, metadata, tracker=None
+    ):
         """Copy Bandcamp audio files to release folder with proper naming"""
+        if tracker:
+            tracker.update_step("Preparing Bandcamp files", 41)
+
         audio_files = self.get_bandcamp_audio_files(bandcamp_folder)
         if not audio_files:
             return False
@@ -146,7 +153,14 @@ class DiscogsLibraryMirror:
 
         # Create simple mapping: assume audio files are in track order
         copied_count = 0
+        total_files = min(len(audio_files), len(tracklist))
+
         for i, audio_file in enumerate(audio_files):
+            if tracker and total_files > 0:
+                progress = 42 + (i / total_files) * 8  # 42-50% range
+                tracker.update_step(
+                    f"Copying Bandcamp file {i + 1}/{total_files}", progress
+                )
             if i >= len(tracklist):
                 logger.warning(
                     f"More audio files than tracks in tracklist, stopping at {i}"
@@ -177,7 +191,7 @@ class DiscogsLibraryMirror:
         logger.success(f"Successfully copied {copied_count} Bandcamp audio files")
         return copied_count > 0
 
-    def analyze_bandcamp_audio(self, metadata, download_only=False):
+    def analyze_bandcamp_audio(self, metadata, download_only=False, tracker=None):
         """Analyze Bandcamp audio files if analysis is enabled"""
         if download_only:
             return
@@ -185,7 +199,16 @@ class DiscogsLibraryMirror:
         # Import audio analyzer
         from analyzeSoundFile import analyzeAudioFileOrStream
 
-        for track in metadata.get("tracklist", []):
+        tracklist = metadata.get("tracklist", [])
+        total_tracks = len(tracklist)
+
+        for track_idx, track in enumerate(tracklist):
+            if tracker and total_tracks > 0:
+                progress = 70 + (track_idx / total_tracks) * 15  # 70-85% range
+                tracker.update_step(
+                    f"Analyzing Bandcamp track {track_idx + 1}/{total_tracks}", progress
+                )
+
             track_position = track.get("position", "")
             if not track_position:
                 continue
@@ -263,10 +286,13 @@ class DiscogsLibraryMirror:
         page = 1  # start page?
 
         while True:
+            logger.info(f"Fetching page {page} from Discogs API...")
             releases = folder.releases.page(page)  # Get releases of current page
-            # print(len(folder.releases.page(page)))
+
             for release in releases:
                 release_ids.append(release.release.id)
+
+            logger.info(f"Downloaded {len(release_ids)} release IDs so far...")
 
             # If current page has fewer than per_page releases, we might be done
             if len(releases) < 50:  # change to 50 later for entire library
@@ -275,6 +301,7 @@ class DiscogsLibraryMirror:
             page += 1
             time.sleep(1)  # Wait for Discogs API rate limit
 
+        logger.success(f"Loaded {len(release_ids)} release IDs from Discogs collection")
         return release_ids
 
     def clean_string_for_filename(self, name, replace_with="_"):
@@ -327,7 +354,13 @@ class DiscogsLibraryMirror:
         return local_ids
 
     def _is_release_complete(self, release_dir):
-        """Check if a release has completed all processing steps."""
+        """
+        Check if a release has completed all processing steps.
+
+        This will trigger a retry if:
+        - yt_matches.json is missing (need to retry YouTube matching)
+        - Any waveform files are missing (need to retry audio analysis)
+        """
         try:
             # Step 1: Metadata from Discogs
             metadata_file = release_dir / "metadata.json"
@@ -350,8 +383,12 @@ class DiscogsLibraryMirror:
                 return False
 
             # Step 2: YouTube videos matched
+            # Missing yt_matches.json means we should retry YouTube matching
             yt_matches_file = release_dir / "yt_matches.json"
             if not yt_matches_file.exists():
+                logger.debug(
+                    f"Release {release_dir.name} missing yt_matches.json - will retry YouTube matching"
+                )
                 return False
 
             # Load metadata to get expected tracks
@@ -365,37 +402,61 @@ class DiscogsLibraryMirror:
                 # No tracks expected, but basic files should exist
                 return True
 
+            # Load YouTube matches to see which tracks should have audio
+            with open(yt_matches_file, "r", encoding="utf-8") as f:
+                yt_matches = json.load(f)
+
+            # Create a map of track positions with YouTube matches
+            tracks_with_youtube = set()
+            for match in yt_matches:
+                if match.get("youtube_match") is not None:
+                    track_pos = match.get("track_position")
+                    if track_pos:
+                        tracks_with_youtube.add(track_pos)
+
             # Check each track for complete processing
             for track in tracklist:
                 track_pos = track.get("position", "")
                 if not track_pos:
                     continue
 
-                # Step 3: Audio downloaded
-                audio_file = release_dir / f"{track_pos}.opus"
-                if not audio_file.exists():
-                    return False
+                # Only check audio/analysis files if this track has a YouTube match
+                if track_pos in tracks_with_youtube:
+                    # Step 3: Audio downloaded
+                    audio_file = release_dir / f"{track_pos}.opus"
+                    audio_file_m4a = release_dir / f"{track_pos}.m4a"
+                    if not audio_file.exists() and not audio_file_m4a.exists():
+                        logger.debug(
+                            f"Release {release_dir.name} missing audio for track {track_pos} - will retry"
+                        )
+                        return False
 
-                # Step 4: Analysis JSON
-                analysis_file = release_dir / f"{track_pos}.json"
-                if not analysis_file.exists():
-                    return False
+                    # Step 4: Analysis JSON
+                    analysis_file = release_dir / f"{track_pos}.json"
+                    if not analysis_file.exists():
+                        logger.debug(
+                            f"Release {release_dir.name} missing analysis for track {track_pos} - will retry"
+                        )
+                        return False
 
-                # Step 5: Spectrograms
-                mel_spectro = release_dir / f"{track_pos}_Mel-spectogram.png"
-                hpcp_spectro = release_dir / f"{track_pos}_HPCP_chromatogram.png"
-                if not mel_spectro.exists() or not hpcp_spectro.exists():
-                    return False
+                    # Step 5: Spectrograms
+                    mel_spectro = release_dir / f"{track_pos}_Mel-spectogram.png"
+                    hpcp_spectro = release_dir / f"{track_pos}_HPCP_chromatogram.png"
+                    if not mel_spectro.exists() or not hpcp_spectro.exists():
+                        logger.debug(
+                            f"Release {release_dir.name} missing spectrograms for track {track_pos} - will retry"
+                        )
+                        return False
 
-                # Step 6: Waveform
-                waveform_file = release_dir / f"{track_pos}_waveform.png"
-                if not waveform_file.exists():
-                    return False
+                    # Step 6: Waveform (critical check - retry if missing)
+                    waveform_file = release_dir / f"{track_pos}_waveform.png"
+                    if not waveform_file.exists():
+                        logger.debug(
+                            f"Release {release_dir.name} missing waveform for track {track_pos} - will retry"
+                        )
+                        return False
 
-            # Step 7: LaTeX file
-            latex_file = release_dir / "label.tex"
-            if not latex_file.exists():
-                return False
+            # Note: LaTeX files no longer required (using ReportLab PDF generation)
 
             # All steps complete!
             return True
@@ -461,26 +522,9 @@ class DiscogsLibraryMirror:
                 logger.info("Continuing with existing local releases for processing...")
                 releases_to_process = list(local_ids)[:max_releases]
 
-                # For existing releases: Always generate new LaTeX labels
-                logger.process("Regenerating LaTeX labels for existing releases...")
-                logger.info(
-                    f"Will regenerate labels for {len(releases_to_process)} releases: {list(releases_to_process)[:3]}..."
-                )
-                with tqdm(
-                    total=len(releases_to_process),
-                    desc="Updating labels",
-                    unit="release",
-                ) as pbar:
-                    for release_id in releases_to_process:
-                        success = self.regenerate_latex_label(release_id)
-                        if success:
-                            logger.debug(f"✓ Label regenerated for {release_id}")
-                        else:
-                            logger.warning(
-                                f"✗ Failed to regenerate label for {release_id}"
-                            )
-                        pbar.update(1)
-                logger.success("Label regeneration completed!")
+                # Note: Label generation moved to separate generate_labels.py script
+                logger.info(f"Processing {len(releases_to_process)} existing releases")
+                logger.info("Run ./bin/generate-labels.sh to create PDF labels")
                 return  # Done - no further sync operations needed
             else:
                 # Only now load Discogs collection if really necessary
@@ -530,14 +574,14 @@ class DiscogsLibraryMirror:
         # Get optimal workers for release processing (I/O intensive)
         if discogs_only:
             # For Discogs-only mode: limit workers due to API rate limits (60/min = 1/sec)
-            # Use fewer workers but still benefit from I/O concurrency
-            optimal_workers = min(3, max(1, len(releases_to_process) // 10))
+            # Use more workers for better I/O concurrency while staying under rate limits
+            optimal_workers = min(8, max(2, len(releases_to_process) // 5))
             logger.debug(
                 f"Discogs-only mode: using {optimal_workers} workers (rate limit: 60/min)"
             )
         else:
             optimal_workers, effective_cores, logical_cores, ht_detected = (
-                get_optimal_workers(min_workers=2, max_percentage=0.6)
+                get_optimal_workers(min_workers=2, max_percentage=0.85)
             )
 
             if ht_detected:
@@ -636,7 +680,7 @@ class DiscogsLibraryMirror:
                 monitor.install_log_handler()
 
                 with Live(
-                    monitor._build_display(), console=console, refresh_per_second=2
+                    monitor._build_display(), console=console, refresh_per_second=10
                 ) as live:
                     with executor_class(max_workers=optimal_workers) as executor:
                         futures = [
@@ -649,6 +693,7 @@ class DiscogsLibraryMirror:
                             for release_id in releases_to_process
                         ]
 
+                        completed_futures = 0
                         for future in concurrent.futures.as_completed(futures):
                             if monitor.is_shutdown_requested():
                                 # Cancel remaining futures
@@ -658,15 +703,23 @@ class DiscogsLibraryMirror:
 
                             try:
                                 result = future.result()
+                                completed_futures += 1
                             except Exception as e:
                                 logger.error(f"Error during synchronization: {e}")
+                                completed_futures += 1
 
-                            # Update display
+                            # Update display after each completion
                             live.update(monitor._build_display())
 
-                    # Final update
-                    time.sleep(0.5)
-                    live.update(monitor._build_display())
+                    # Wait for executor to fully shut down
+                    # This ensures all threads have finished and updated their state
+
+                # Final update after executor context exits
+                time.sleep(0.1)  # Brief pause to ensure all state updates are visible
+
+                # Build final display one more time to ensure 100% is shown
+                final_display = monitor._build_display()
+                console.print(final_display)
 
                 # Print summary
                 if monitor.is_shutdown_requested():
@@ -679,6 +732,15 @@ class DiscogsLibraryMirror:
                 )
                 if monitor.error_count > 0:
                     console.print(f"[bold red]Errors:[/] {monitor.error_count}")
+
+                # Clear message that sync phase is complete
+                console.print(
+                    "\n[bold cyan]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/]"
+                )
+                console.print("[bold green]✅ Sync phase complete![/]")
+                console.print(
+                    "[bold cyan]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/]\n"
+                )
 
             except KeyboardInterrupt:
                 monitor._signal_handler(None, None)
@@ -826,9 +888,7 @@ class DiscogsLibraryMirror:
         if tracker:
             tracker.add_file(str(self.release_folder / "metadata.json"))
         # save coverart
-        if tracker:
-            tracker.update_step("Downloading cover art", 30)
-        self.save_cover_art(release_id, metadata)
+        self.save_cover_art(release_id, metadata, tracker)
         if tracker:
             cover_files = list(self.release_folder.glob("cover.*"))
             if cover_files:
@@ -846,14 +906,16 @@ class DiscogsLibraryMirror:
         # Check for Bandcamp high-quality audio first
         if tracker:
             tracker.update_step("Checking for Bandcamp audio", 35)
-        bandcamp_folder = self.find_bandcamp_release(metadata)
+        bandcamp_folder = self.find_bandcamp_release(metadata, tracker)
         used_bandcamp = False
 
         if bandcamp_folder:
             if tracker:
                 tracker.update_step("Copying Bandcamp audio", 40)
             logger.info(f"🎵 Found Bandcamp release: {bandcamp_folder}")
-            if self.copy_bandcamp_audio_to_release_folder(bandcamp_folder, metadata):
+            if self.copy_bandcamp_audio_to_release_folder(
+                bandcamp_folder, metadata, tracker
+            ):
                 logger.success(f"✅ Using high-quality Bandcamp audio for {release_id}")
                 used_bandcamp = True
 
@@ -868,7 +930,9 @@ class DiscogsLibraryMirror:
                     if tracker:
                         tracker.update_step("Analyzing Bandcamp audio", 70)
                     # Analyze Bandcamp audio files
-                    self.analyze_bandcamp_audio(metadata, download_only=False)
+                    self.analyze_bandcamp_audio(
+                        metadata, download_only=False, tracker=tracker
+                    )
             else:
                 logger.warning(
                     "⚠️ Failed to copy Bandcamp audio, falling back to YouTube"
@@ -880,7 +944,7 @@ class DiscogsLibraryMirror:
                 tracker.update_step("Searching YouTube", 45)
             logger.info(f"🎬 Using YouTube audio for {release_id}")
             yt_searcher = youtube_handler.YouTubeMatcher(
-                self.release_folder, False
+                self.release_folder, False, tracker
             )  # initialize yt_module
             yt_searcher.match_discogs_release_youtube(
                 metadata
@@ -914,96 +978,27 @@ class DiscogsLibraryMirror:
 
         if not download_only:
             if tracker:
-                tracker.update_step("Generating QR code", 85)
+                tracker.update_step("Generating QR code", 90)
             # create qr code with cover background
-            generate_qr_code_advanced(self.release_folder, release_id, metadata)
+            generate_qr_code_advanced(
+                self.release_folder, release_id, metadata, tracker
+            )
             if tracker:
                 qr_files = list(self.release_folder.glob("*qr*.png"))
                 if qr_files:
                     tracker.add_file(str(qr_files[0]))
 
-            if tracker:
-                tracker.update_step("Creating LaTeX label", 95)
-            # create latex labels
-            create_latex_label_file(self.release_folder, metadata)
-            if tracker:
-                tracker.add_file(str(self.release_folder / "label.tex"))
+        if tracker:
+            tracker.update_step("Completed", 100)
+
+        logger.success(f"✅ Release {release_id} synchronized successfully")
 
     def regenerate_latex_label(self, release_id):
-        """Regenerates only the LaTeX label for an existing release without sync operations"""
-        try:
-            logger.debug(f"Regenerating label for release ID: {release_id}")
-
-            # Find all matching release folders
-            matching_folders = []
-            for item in self.library_path.iterdir():
-                if item.is_dir() and item.name.startswith(f"{release_id}_"):
-                    matching_folders.append(item)
-
-            if not matching_folders:
-                logger.error(
-                    f"Release folder not found for ID: {release_id} in {self.library_path}"
-                )
-                return False
-
-            # Handle multiple folders - process ALL matching folders
-            if len(matching_folders) > 1:
-                folder_names = [f.name for f in matching_folders]
-                logger.warning(
-                    f"Multiple directories found for ID {release_id}: {folder_names}"
-                )
-                logger.info(
-                    f"Processing labels for all {len(matching_folders)} folders"
-                )
-
-            all_success = True
-            for release_folder in matching_folders:
-                logger.debug(f"Processing folder: {release_folder.name}")
-
-                # Load existing metadata
-                metadata_file = release_folder / "metadata.json"
-                if not metadata_file.exists():
-                    logger.error(
-                        f"No metadata.json found for release {release_id} at {metadata_file}"
-                    )
-                    all_success = False
-                    continue
-
-                logger.debug(f"Loading metadata from: {metadata_file}")
-                with open(metadata_file, "r", encoding="utf-8") as f:
-                    metadata = json.load(f)
-
-                # Create new LaTeX label (overwrites existing)
-                logger.debug(
-                    f"Creating LaTeX label for: {metadata.get('title', 'Unknown')}"
-                )
-                result = create_latex_label_file(str(release_folder), metadata)
-
-                if result:
-                    logger.debug(
-                        f"✓ Successfully regenerated LaTeX label for release {release_id} in {release_folder.name}"
-                    )
-                    # Check if file was really created
-                    label_file = release_folder / "label.tex"
-                    if label_file.exists():
-                        logger.debug(f"✓ label.tex file exists at: {label_file}")
-                    else:
-                        logger.warning(f"✗ label.tex file NOT found at: {label_file}")
-                        all_success = False
-                else:
-                    logger.warning(
-                        f"✗ create_latex_label_file returned False for {release_id} in {release_folder.name}"
-                    )
-                    all_success = False
-
-            return all_success
-
-        except Exception as e:
-            logger.error(f"Error regenerating LaTeX label for {release_id}: {e}")
-            import traceback
-
-            logger.error(traceback.format_exc())
-            return False
+        """DEPRECATED: LaTeX label generation removed. Use generate_labels.py with ReportLab instead."""
+        logger.warning(
+            f"regenerate_latex_label() is deprecated. Use './bin/generate-labels.sh' to create PDF labels."
+        )
+        return True
 
         # yt_searcher.search_release_tracks(release_id, metaData, self.release_folder )
 
@@ -1012,14 +1007,16 @@ class DiscogsLibraryMirror:
     def regenerate_existing_files(
         self, regenerate_labels=False, regenerate_waveforms=False, max_releases=None
     ):
-        """Regenerates LaTeX labels and/or waveforms for existing releases"""
+        """Regenerates waveforms for existing releases. Label generation moved to generate_labels.py"""
 
-        # For label regeneration, use all releases with metadata.json (not just complete ones)
-        if regenerate_labels and not regenerate_waveforms:
-            local_ids = set(self.get_all_local_release_ids())
-        else:
-            # For waveforms or combined regeneration, use only complete releases
-            local_ids = set(self.get_local_release_ids())
+        if regenerate_labels:
+            logger.warning(
+                "Label regeneration deprecated. Use './bin/generate-labels.sh' instead."
+            )
+            regenerate_labels = False
+
+        # Use only complete releases for waveform regeneration
+        local_ids = set(self.get_local_release_ids())
 
         if not local_ids:
             logger.warning("No local releases found for regeneration")
@@ -1054,8 +1051,8 @@ class DiscogsLibraryMirror:
                 success_labels = True
                 success_waveforms = True
 
-                if regenerate_labels:
-                    success_labels = self.regenerate_latex_label(release_id)
+                # Label regeneration removed - use generate_labels.py
+                success_labels = True
 
                 if regenerate_waveforms:
                     success_waveforms = self.regenerate_waveforms(release_id)
@@ -1141,8 +1138,7 @@ class DiscogsLibraryMirror:
                     # 2. QR code generation (both simple and fancy)
                     generate_qr_code_advanced(self.release_folder, release_id, metadata)
 
-                    # 3. Create/update LaTeX label
-                    create_latex_label_file(self.release_folder, metadata)
+                    # Note: Label creation moved to generate_labels.py (uses ReportLab)
 
                 except Exception as e:
                     logger.error(f"Error processing release {release_id} offline: {e}")
@@ -1294,14 +1290,11 @@ class DiscogsLibraryMirror:
             logger.error(traceback.format_exc())
             return False
 
-        # create LaTeX snippet?
-        # - qr code
-
-        # out of loop, create LaTeX full sheet
+        # Note: Label generation moved to generate_labels.py
 
         return
 
-    def save_cover_art(self, release_id, metadata):
+    def save_cover_art(self, release_id, metadata, tracker=None):
         """Downloads all available cover images for a release"""
 
         # Check if primary cover already exists - if so, skip API call entirely
@@ -1311,6 +1304,9 @@ class DiscogsLibraryMirror:
                 f"Primary cover already exists for release {release_id}, skipping Discogs API call"
             )
             return
+
+        if tracker:
+            tracker.update_step("Fetching cover art metadata", 28)
 
         try:
             release = self.discogs.release(release_id)
@@ -1327,6 +1323,14 @@ class DiscogsLibraryMirror:
         # Download all images with proper naming
         for i, image in enumerate(images):
             try:
+                if tracker:
+                    progress = (
+                        30 + (i / len(images)) * 5
+                    )  # 30-35% range for cover downloads
+                    tracker.update_step(
+                        f"Downloading cover art {i + 1}/{len(images)}", progress
+                    )
+
                 image_url = image["uri"]
 
                 # First image keeps original name, others get indexed
@@ -1396,9 +1400,8 @@ class DiscogsLibraryMirror:
             # Process audio analysis
             self._process_audio_analysis_offline(metadata)
 
-            # Generate LaTeX label and QR code
-            self._generate_latex_label(metadata)
-            self._generate_qr_code(metadata)
+            # Generate QR code only (labels generated via generate_labels.py)
+            generate_qr_code_advanced(self.release_folder, release_id, metadata)
 
             logger.success(f"✅ Completed offline processing for release {release_id}")
             return True

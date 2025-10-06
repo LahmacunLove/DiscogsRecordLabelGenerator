@@ -70,7 +70,6 @@ if [ $EXIT_CODE -eq 0 ]; then
     echo "  • Run a test sync:     $PROJECT_ROOT/bin/sync.sh --dev"
     echo "  • Full sync:           $PROJECT_ROOT/bin/sync.sh"
     echo "  • Generate labels:     $PROJECT_ROOT/bin/generate-labels.sh"
-    echo "  • Main application:    $PROJECT_ROOT/bin/main.sh"
     echo ""
 fi
 

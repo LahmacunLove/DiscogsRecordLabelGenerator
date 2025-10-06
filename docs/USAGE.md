@@ -7,7 +7,6 @@ This guide covers all commands and options available in DiscogsRecordLabelGenera
 The project provides several tools:
 
 - **`sync.sh`**: Sync Discogs collection and generate labels (all-in-one)
-- **`main.sh`**: Process existing releases without syncing
 - **`generate-labels.sh`**: Generate labels from existing data
 - **`setup.sh`**: Interactive configuration wizard
 
@@ -126,52 +125,7 @@ The primary tool for syncing your Discogs collection and generating labels.
 ./bin/sync.sh --help
 ```
 
-## main.sh - Process Existing Releases
 
-Process releases already downloaded without syncing new data.
-
-### Basic Usage
-
-```bash
-# Process all existing releases
-./bin/main.sh
-
-# Development mode (first 10 releases)
-./bin/main.sh --dev
-
-# Dry run (verify existing data)
-./bin/main.sh --dryrun
-```
-
-### Options
-
-```bash
---dev                      # Development mode (limit to 10 releases)
---dryrun                  # Process without downloads or API calls
---download-only           # Download audio without analysis
---max N                   # Limit to N releases
---regenerate-labels       # Regenerate labels from existing data
---regenerate-waveforms    # Regenerate waveform images
-```
-
-### Examples
-
-```bash
-# Download audio for 25 releases without analysis
-./bin/main.sh --download-only --max 25
-
-# Regenerate all labels
-./bin/main.sh --regenerate-labels
-
-# Regenerate waveforms for first 50 releases
-./bin/main.sh --regenerate-waveforms --max 50
-```
-
-### Help
-
-```bash
-./bin/main.sh --help
-```
 
 ## generate-labels.sh - Generate Labels Only
 
@@ -248,7 +202,7 @@ source venv/bin/activate
 
 # Then run any script
 python3 scripts/sync.py --dev
-python3 scripts/main.py --dryrun
+python3 scripts/sync.py --dryrun
 python3 scripts/generate_labels.py --max 10
 ```
 
@@ -286,12 +240,9 @@ pip install -r requirements.txt
 ### Batch Processing
 
 ```bash
-# Download audio for entire collection (no analysis yet)
-./bin/main.sh --download-only
-
-# Then analyze in batches
-./bin/main.sh --max 50
-./bin/main.sh --max 100
+# Process collection in batches
+./bin/sync.sh --max 50
+./bin/sync.sh --max 100
 # etc.
 ```
 
@@ -299,10 +250,10 @@ pip install -r requirements.txt
 
 ```bash
 # Regenerate labels after template changes
-./bin/main.sh --regenerate-labels
+./bin/sync.sh --labels-only --max-labels 10
 
-# Regenerate waveforms with new settings
-./bin/main.sh --regenerate-waveforms
+# Process existing releases with --dryrun
+./bin/sync.sh --dryrun
 ```
 
 ## Understanding Modes
@@ -328,7 +279,7 @@ pip install -r requirements.txt
 - Downloads audio files
 - Skips analysis (BPM, key detection, waveforms)
 - Faster for bulk downloads
-- Can analyze later with `./bin/main.sh`
+- Process with `./bin/sync.sh --dryrun` for offline processing
 
 ### Labels-Only Mode (`--labels-only`)
 
@@ -382,7 +333,7 @@ The scripts don't support parallel execution, but you can process batches:
 
 ```bash
 # Terminal 1
-./bin/main.sh --max 100
+./bin/sync.sh --max 100
 
 # Terminal 2
 ./bin/generate-labels.sh --max 50
@@ -446,7 +397,7 @@ rsync -av output_labels/ /backup/labels/
 ```bash
 # 1. Modify LaTeX template in src/
 # 2. Regenerate labels
-./bin/main.sh --regenerate-labels --max 5
+./bin/sync.sh --labels-only --max-labels 5
 # 3. Check output_labels/label_combined.pdf
 ```
 
@@ -462,8 +413,7 @@ rsync -av output_labels/ /backup/labels/
 ```bash
 # Full reprocessing (caution: time-consuming)
 ./bin/sync.sh --dryrun
-./bin/main.sh --regenerate-waveforms
-./bin/main.sh --regenerate-labels
+./bin/sync.sh --labels-only
 ```
 
 ## See Also

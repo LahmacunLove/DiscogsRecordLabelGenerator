@@ -54,7 +54,6 @@ Executable wrapper scripts for easy command access.
 **Examples:**
 - `setup.sh` - Interactive configuration wizard
 - `sync.sh` - Sync and label generation wrapper
-- `main.sh` - Main processing script wrapper
 - `generate-labels.sh` - Label generation wrapper
 
 ### `/tests/` - Test Files

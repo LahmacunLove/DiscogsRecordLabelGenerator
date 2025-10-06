@@ -113,9 +113,24 @@ def _analyze_track_standalone(task):
 
 
 class YouTubeMatcher:
-    def __init__(self, release_folder, debug):
+    def __init__(self, release_folder, debug, tracker=None):
         self.release_folder = release_folder
         self.debug = debug
+        self.tracker = tracker
+        self.current_track_index = 0
+        self.total_tracks = 0
+        # Extract release_id from folder name for error tracking
+        self.release_id = self._extract_release_id(release_folder)
+
+        # Load YouTube cookies configuration if available
+        from config import load_config
+
+        try:
+            config = load_config()
+            youtube_cookies_browser = config.get("YOUTUBE_COOKIES_BROWSER")
+        except:
+            youtube_cookies_browser = None
+
         self.ytdl_opts = {
             "quiet": True,
             "skip_download": True,
@@ -129,6 +144,21 @@ class YouTubeMatcher:
                 }
             ],
         }
+
+        # Add browser cookies if configured (helps bypass bot detection)
+        if youtube_cookies_browser:
+            self.ytdl_opts["cookiesfrombrowser"] = (youtube_cookies_browser,)
+            logger.info(
+                f"Using {youtube_cookies_browser} cookies for YouTube authentication"
+            )
+
+    def _extract_release_id(self, release_folder):
+        """Extract release ID from folder path (format: {id}_{title})"""
+        folder_name = os.path.basename(release_folder)
+        # Release folders are typically named: {release_id}_{release_title}
+        if "_" in folder_name:
+            return folder_name.split("_")[0]
+        return folder_name
 
     def fetch_single_metadata(self, url):
         logger.debug(f"Fetching metadata from: {url}")
@@ -150,6 +180,13 @@ class YouTubeMatcher:
 
     def fetch_release_YTmetadata(self, video_urls):
         self.youtube_release_metadata = []
+
+        if not video_urls or len(video_urls) == 0:
+            logger.youtube_error(
+                "No YouTube video URLs provided for release",
+                release_id=self.release_id,
+            )
+            return []
 
         if len(video_urls) <= 1:
             # Process single URLs normally
@@ -179,9 +216,15 @@ class YouTubeMatcher:
                     except Exception as e:
                         logger.warning(f"Error fetching metadata for {url}: {e}")
 
-            logger.success(
-                f"Fetched metadata for {len(self.youtube_release_metadata)}/{len(video_urls)} videos"
-            )
+            if len(self.youtube_release_metadata) > 0:
+                logger.success(
+                    f"Fetched metadata for {len(self.youtube_release_metadata)}/{len(video_urls)} videos"
+                )
+            else:
+                logger.youtube_error(
+                    f"Failed to fetch metadata for all {len(video_urls)} YouTube videos",
+                    release_id=self.release_id,
+                )
 
         return self.youtube_release_metadata
 
@@ -193,6 +236,9 @@ class YouTubeMatcher:
             return None
 
     def match_discogs_release_youtube(self, discogs_metadata):
+        if self.tracker:
+            self.tracker.update_step("Checking YouTube matches cache", 46)
+
         if (
             os.path.isfile(os.path.join(self.release_folder, "yt_matches.json"))
             and self.debug == False
@@ -204,8 +250,23 @@ class YouTubeMatcher:
             ) as f:
                 self.matches = json.load(f)
         else:
+            if self.tracker:
+                self.tracker.update_step("Fetching YouTube metadata", 47)
+
             video_urls = discogs_metadata["videos"]
             youtube_metadata = self.fetch_release_YTmetadata(video_urls)
+
+            # If no YouTube videos were successfully fetched, log error and return without creating yt_matches.json
+            if not youtube_metadata or len(youtube_metadata) == 0:
+                logger.youtube_error(
+                    "No YouTube metadata available - cannot match tracks. Will retry on next sync.",
+                    release_id=self.release_id,
+                )
+                self.matches = []
+                return
+
+            if self.tracker:
+                self.tracker.update_step("Matching tracks with YouTube", 50)
 
             self.matches = []
 
@@ -341,13 +402,24 @@ class YouTubeMatcher:
                             }
                         )
 
-            # Save as JSON
-            with open(
-                os.path.join(self.release_folder, "yt_matches.json"),
-                "w",
-                encoding="utf-8",
-            ) as f:
-                json.dump(self.matches, f, indent=2, ensure_ascii=False)
+            # Only save yt_matches.json if we have valid matches (even if they're null matches)
+            # This ensures we don't create empty files for failed YouTube fetches
+            if self.matches and len(self.matches) > 0:
+                # Save as JSON
+                with open(
+                    os.path.join(self.release_folder, "yt_matches.json"),
+                    "w",
+                    encoding="utf-8",
+                ) as f:
+                    json.dump(self.matches, f, indent=2, ensure_ascii=False)
+                logger.debug(
+                    f"Saved {len(self.matches)} YouTube matches to yt_matches.json"
+                )
+            else:
+                logger.youtube_error(
+                    "No matches created - yt_matches.json not written. Will retry on next sync.",
+                    release_id=self.release_id,
+                )
 
         # Update original metadata with YouTube durations if Discogs duration is missing
         self.update_metadata_with_youtube_durations()
@@ -414,8 +486,30 @@ class YouTubeMatcher:
     def audio_download_analyze(self, release_metadata):
         """Downloads audio for matched tracks and performs analysis"""
 
+        # Progress hook for yt-dlp
+        def progress_hook(d):
+            if self.tracker and d["status"] == "downloading":
+                try:
+                    downloaded = d.get("downloaded_bytes", 0)
+                    total = d.get("total_bytes") or d.get("total_bytes_estimate", 0)
+                    if total > 0:
+                        percent = (downloaded / total) * 100
+                        track_progress = (
+                            self.current_track_index / max(self.total_tracks, 1) * 100
+                        )
+                        overall_progress = 60 + (
+                            track_progress * 0.1
+                        )  # 60-70% range for download
+                        self.tracker.update_step(
+                            f"Downloading track {self.current_track_index + 1}/{self.total_tracks} ({percent:.0f}%)",
+                            overall_progress,
+                        )
+                except:
+                    pass
+
         ytdl_opts = {
-            "quiet": False,  # Enable output for debugging
+            "quiet": True,  # Suppress yt-dlp output
+            "no_warnings": True,
             "skip_download": False,
             "nocheckcertificate": True,
             "format": "bestaudio/best",
@@ -430,15 +524,25 @@ class YouTubeMatcher:
                 }
             ],
             "ignoreerrors": True,  # Continue on errors
+            "progress_hooks": [progress_hook],
         }
 
         # Download phase - separate from analysis
         downloaded_tracks = []
 
+        # Set total tracks for progress tracking
+        self.total_tracks = len(
+            [m for m in self.matches if m["youtube_match"] is not None]
+        )
+
         for i, match in enumerate(self.matches):
+            self.current_track_index = i
             if match["youtube_match"] is None:
-                logger.warning(
-                    f"No YouTube match for track {match.get('track_position', i)}"
+                track_pos = match.get("track_position", i)
+                logger.youtube_error(
+                    f"No YouTube match for track {track_pos}",
+                    release_id=self.release_id,
+                    track_position=track_pos,
                 )
                 continue
 
@@ -481,12 +585,21 @@ class YouTubeMatcher:
                     logger.success(f"Downloaded: {os.path.basename(downloaded_file)}")
                     downloaded_tracks.append((track_filename_base, track_position))
                 else:
-                    logger.error(
-                        f"Download failed for track {track_position} - no file found"
+                    logger.youtube_error(
+                        f"Download failed for track {track_position} - no file found",
+                        release_id=self.release_id,
+                        track_position=track_position,
+                        url=url,
                     )
 
             except Exception as e:
-                logger.error(f"Download error for track {track_position}: {e}")
+                logger.youtube_error(
+                    f"Download error for track {track_position}: {e}",
+                    release_id=self.release_id,
+                    track_position=track_position,
+                    url=url,
+                    exception=e,
+                )
                 continue
 
         # Analysis phase - parallel analysis of all downloaded tracks
@@ -506,8 +619,28 @@ class YouTubeMatcher:
     def audio_download_only(self, release_metadata):
         """Downloads audio for matched tracks without analysis (download-only mode)"""
 
+        # Progress hook for yt-dlp
+        def progress_hook(d):
+            if self.tracker and d["status"] == "downloading":
+                try:
+                    downloaded = d.get("downloaded_bytes", 0)
+                    total = d.get("total_bytes") or d.get("total_bytes_estimate", 0)
+                    if total > 0:
+                        percent = (downloaded / total) * 100
+                        track_progress = (
+                            self.current_track_index / max(self.total_tracks, 1) * 100
+                        )
+                        overall_progress = 60 + (track_progress * 0.25)  # 60-85% range
+                        self.tracker.update_step(
+                            f"Downloading track {self.current_track_index + 1}/{self.total_tracks} ({percent:.0f}%)",
+                            overall_progress,
+                        )
+                except:
+                    pass
+
         ytdl_opts = {
-            "quiet": False,  # Enable output for debugging
+            "quiet": True,  # Suppress yt-dlp output
+            "no_warnings": True,
             "skip_download": False,
             "nocheckcertificate": True,
             "format": "bestaudio/best",
@@ -522,16 +655,26 @@ class YouTubeMatcher:
                 }
             ],
             "ignoreerrors": True,  # Continue on errors
+            "progress_hooks": [progress_hook],
         }
 
         # Download phase - without analysis
         downloaded_tracks = []
         release_folder_name = os.path.basename(self.release_folder)
 
+        # Set total tracks for progress tracking
+        self.total_tracks = len(
+            [m for m in self.matches if m["youtube_match"] is not None]
+        )
+
         for i, match in enumerate(self.matches):
+            self.current_track_index = i
             if match["youtube_match"] is None:
-                logger.warning(
-                    f"[{release_folder_name}] No YouTube match for track {match.get('track_position', i)}"
+                track_pos = match.get("track_position", i)
+                logger.youtube_error(
+                    f"[{release_folder_name}] No YouTube match for track {track_pos}",
+                    release_id=self.release_id,
+                    track_position=track_pos,
                 )
                 continue
 
@@ -576,13 +719,20 @@ class YouTubeMatcher:
                     )
                     downloaded_tracks.append((track_filename_base, track_position))
                 else:
-                    logger.error(
-                        f"[{release_folder_name}] Download failed for track {track_position} - no file found"
+                    logger.youtube_error(
+                        f"[{release_folder_name}] Download failed for track {track_position} - no file found",
+                        release_id=self.release_id,
+                        track_position=track_position,
+                        url=url,
                     )
 
             except Exception as e:
-                logger.error(
-                    f"[{release_folder_name}] Download error for track {track_position}: {e}"
+                logger.youtube_error(
+                    f"[{release_folder_name}] Download error for track {track_position}: {e}",
+                    release_id=self.release_id,
+                    track_position=track_position,
+                    url=url,
+                    exception=e,
                 )
                 continue
 

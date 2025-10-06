@@ -8,6 +8,7 @@ This guide provides detailed installation instructions for DiscogsRecordLabelGen
 - **ffmpeg**: Audio processing and conversion
 - **xelatex**: PDF generation with Unicode support (part of TeX Live or MiKTeX)
 - **gnuplot**: Waveform visualization (optional but recommended)
+- **Fonts**: Inter font recommended for optimal label typography (optional but recommended)
 
 ## Platform-Specific Instructions
 
@@ -19,6 +20,9 @@ sudo apt update
 
 # Install system dependencies
 sudo apt install ffmpeg texlive-xetex gnuplot python3-pip python3-venv
+
+# Install recommended fonts (optional but recommended)
+sudo apt install fonts-inter fonts-fira-sans fonts-source-sans-pro
 
 # Clone the repository (if not already done)
 git clone <repository-url>
@@ -42,6 +46,10 @@ pip install -r requirements.txt
 
 # Install system dependencies
 brew install ffmpeg mactex gnuplot python@3.11
+
+# Install recommended fonts (optional but recommended)
+brew tap homebrew/cask-fonts
+brew install --cask font-inter font-fira-sans font-source-sans-pro
 
 # Add LaTeX to PATH (if needed)
 echo 'export PATH="/Library/TeX/texbin:$PATH"' >> ~/.zshrc
@@ -70,6 +78,9 @@ xcode-select --install
 # Install system dependencies
 sudo pacman -S ffmpeg texlive-core texlive-bin gnuplot python-pip
 
+# Install recommended fonts (optional but recommended)
+sudo pacman -S inter-font ttf-fira-sans adobe-source-sans-fonts
+
 # Clone the repository (if not already done)
 git clone <repository-url>
 cd DiscogsRecordLabelGenerator
@@ -85,11 +96,18 @@ pip install -r requirements.txt
 ### Fedora/RHEL/CentOS
 
 ```bash
-# Enable EPEL repository (RHEL/CentOS only)
-sudo dnf install epel-release
-
 # Install system dependencies
 sudo dnf install ffmpeg texlive-xetex gnuplot python3-pip
+
+# Install recommended fonts (optional but recommended)
+sudo dnf install mozilla-fira-sans-fonts adobe-source-sans-pro-fonts
+
+# For Inter font (manual installation)
+wget https://github.com/rsms/inter/releases/download/v4.0/Inter-4.0.zip
+unzip Inter-4.0.zip -d Inter
+sudo mkdir -p /usr/share/fonts/inter
+sudo cp Inter/Inter\ Desktop/*.ttf /usr/share/fonts/inter/
+sudo fc-cache -fv
 
 # Clone the repository (if not already done)
 git clone <repository-url>
@@ -102,6 +120,42 @@ source venv/bin/activate
 # Install Python dependencies
 pip install -r requirements.txt
 ```
+
+## Recommended Fonts
+
+The PDF label generator uses a smart font fallback system. For best results, install **Inter** font:
+
+**Why Inter?**
+- Designed specifically for high readability at small sizes (perfect for labels)
+- Modern, professional appearance
+- Excellent Unicode support for international characters
+- Free and open-source (SIL Open Font License)
+
+**Font Priority:**
+1. **Inter** - Best choice (most readable at small sizes)
+2. **Source Sans Pro** - Adobe's professional font
+3. **Fira Sans** - Mozilla's professional font
+4. **Liberation Sans** - Free Helvetica alternative
+5. **DejaVu Sans** - Good Unicode support
+6. **Helvetica** - Built-in PDF font (last resort)
+
+**Manual Inter Installation (if not available via package manager):**
+
+```bash
+# Download latest version
+wget https://github.com/rsms/inter/releases/download/v4.0/Inter-4.0.zip
+unzip Inter-4.0.zip -d Inter
+
+# Linux
+sudo mkdir -p /usr/share/fonts/inter
+sudo cp Inter/Inter\ Desktop/*.ttf /usr/share/fonts/inter/
+sudo fc-cache -fv
+
+# Verify installation
+fc-list | grep -i "inter"
+```
+
+For more details, see [Font Documentation](QA.md#q-what-font-should-be-used-for-pdf-labels).
 
 ### Windows
 
@@ -197,7 +251,7 @@ The `bin/` scripts automatically activate the virtual environment:
 
 ```bash
 ./bin/sync.sh --dev        # venv activated automatically
-./bin/main.sh --help       # venv activated automatically
+./bin/sync.sh --help       # see all options
 ```
 
 ## Python Dependencies
