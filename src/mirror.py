@@ -38,11 +38,14 @@ class DiscogsLibraryMirror:
         self.user = self.discogs.identity()
         self.username = self.user.username
 
-        # Initialize database
-        db_path = self.library_path / "discogs_collection.db"
-        self.db = DiscogsDatabase(db_path)
+        # Store database path but don't create connection (to avoid pickling issues)
+        self.db_path = self.library_path / "discogs_collection.db"
 
         logger.info(f"Library path: {self.library_path}")
+
+    def _get_db_connection(self):
+        """Get a database connection (creates new connection each time for thread/process safety)"""
+        return DiscogsDatabase(self.db_path)
 
     def _init_discogs_client(self):
         token = self.config.get("DISCOGS_USER_TOKEN")
@@ -404,10 +407,14 @@ class DiscogsLibraryMirror:
         with open(metadata_path, "w", encoding="utf-8") as f:
             json.dump(metadata, f, indent=4, ensure_ascii=False)
 
-        # Also save to database
-        metadata_with_folder = metadata.copy()
-        metadata_with_folder['release_folder'] = str(release_folder)
-        self.db.save_release(metadata_with_folder)
+        # Also save to database (use temporary connection for thread safety)
+        try:
+            with self._get_db_connection() as db:
+                metadata_with_folder = metadata.copy()
+                metadata_with_folder['release_folder'] = str(release_folder)
+                db.save_release(metadata_with_folder)
+        except Exception as e:
+            logger.warning(f"Failed to save release {release_id} to database: {e}")
 
         logger.success(f"Release {release_id} metadata saved") 
         
