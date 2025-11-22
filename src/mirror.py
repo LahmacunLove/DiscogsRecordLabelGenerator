@@ -27,6 +27,7 @@ from qr_generator import generate_qr_code_advanced
 from utils import sanitize_filename
 from tqdm import tqdm
 import glob
+from database import DiscogsDatabase
 
 
 class DiscogsLibraryMirror:
@@ -36,6 +37,11 @@ class DiscogsLibraryMirror:
         self.library_path = Path(self.config["LIBRARY_PATH"]).expanduser()
         self.user = self.discogs.identity()
         self.username = self.user.username
+
+        # Initialize database
+        db_path = self.library_path / "discogs_collection.db"
+        self.db = DiscogsDatabase(db_path)
+
         logger.info(f"Library path: {self.library_path}")
 
     def _init_discogs_client(self):
@@ -392,12 +398,17 @@ class DiscogsLibraryMirror:
         title = sanitize_filename(metadata.get('title', release_id))
         release_folder = self.library_path / f"{release_id}_{title}"
         release_folder.mkdir(parents=True, exist_ok=True)
-        
+
         # Save all metadata as JSON file
         metadata_path = release_folder / "metadata.json"
         with open(metadata_path, "w", encoding="utf-8") as f:
             json.dump(metadata, f, indent=4, ensure_ascii=False)
-    
+
+        # Also save to database
+        metadata_with_folder = metadata.copy()
+        metadata_with_folder['release_folder'] = str(release_folder)
+        self.db.save_release(metadata_with_folder)
+
         logger.success(f"Release {release_id} metadata saved") 
         
 
