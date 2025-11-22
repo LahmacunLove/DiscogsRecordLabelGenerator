@@ -47,6 +47,15 @@ class DiscogsLibraryMirror:
         """Get a database connection (creates new connection each time for thread/process safety)"""
         return DiscogsDatabase(self.db_path)
 
+    def get_release_metadata(self, release_id):
+        """Get release metadata from database"""
+        try:
+            with self._get_db_connection() as db:
+                return db.get_release(release_id)
+        except Exception as e:
+            logger.warning(f"Failed to get release {release_id} from database: {e}")
+            return None
+
     def _init_discogs_client(self):
         token = self.config.get("DISCOGS_USER_TOKEN")
         if not token:
@@ -271,77 +280,49 @@ class DiscogsLibraryMirror:
         return name.strip(replace_with)
 
     def get_all_local_release_ids(self):
-        """Get ALL release IDs that have at least metadata.json (for label regeneration)."""
-        if not self.library_path.exists():
+        """Get ALL release IDs from database."""
+        try:
+            with self._get_db_connection() as db:
+                return db.get_all_release_ids()
+        except Exception as e:
+            logger.warning(f"Failed to get release IDs from database: {e}")
             return []
-        local_ids = []
-        for entry in self.library_path.iterdir():
-            if entry.is_dir() and "_" in entry.name:
-                try:
-                    release_id = int(entry.name.split("_")[0])
-                    
-                    # Only check for metadata.json existence
-                    metadata_file = entry / "metadata.json"
-                    if metadata_file.exists():
-                        local_ids.append(release_id)
-                    else:
-                        logger.debug(f"Release {entry.name} has no metadata.json - skipping")
-                except ValueError:
-                    pass
-        return local_ids
 
     def get_local_release_ids(self):
-        """Get release IDs that are completely processed through all pipeline steps."""
-        if not self.library_path.exists():
-            return []
-        local_ids = []
-        for entry in self.library_path.iterdir():
-            if entry.is_dir() and "_" in entry.name:
-                try:
-                    release_id = int(entry.name.split("_")[0])
-                    
-                    # Check for complete processing pipeline
-                    if self._is_release_complete(entry):
-                        local_ids.append(release_id)
-                    else:
-                        logger.debug(f"Release {entry.name} incomplete - will be reprocessed")
-                except ValueError:
-                    pass
-        return local_ids
+        """Get release IDs from database (all releases are considered valid)."""
+        return self.get_all_local_release_ids()
 
     def _is_release_complete(self, release_dir):
         """Check if a release has completed all processing steps."""
         try:
-            # Step 1: Metadata from Discogs
-            metadata_file = release_dir / "metadata.json"
-            if not metadata_file.exists():
+            # Extract release_id from directory name
+            release_id = int(release_dir.name.split("_")[0])
+
+            # Step 1: Metadata from database
+            metadata = self.get_release_metadata(release_id)
+            if not metadata:
                 return False
-            
+
             # Step 1b: Cover image
             cover_file = release_dir / "cover.jpg"
             if not cover_file.exists():
                 return False
-            
+
             # Step 1c: QR code
             qr_file = release_dir / "qrcode.png"
             if not qr_file.exists():
                 return False
-            
+
             # Step 1d: Fancy QR code
             qr_fancy_file = release_dir / "qrcode_fancy.png"
             if not qr_fancy_file.exists():
                 return False
-            
+
             # Step 2: YouTube videos matched
             yt_matches_file = release_dir / "yt_matches.json"
             if not yt_matches_file.exists():
                 return False
-            
-            # Load metadata to get expected tracks
-            import json
-            with open(metadata_file, 'r', encoding='utf-8') as f:
-                metadata = json.load(f)
-            
+
             tracklist = metadata.get('tracklist', [])
             if not tracklist:
                 # No tracks expected, but basic files should exist
@@ -395,28 +376,22 @@ class DiscogsLibraryMirror:
 
     
     def save_release_metadata(self, release_id, metadata):
-        """Saves the complete metadata of a release in a folder and JSON file."""
+        """Saves the complete metadata of a release to database only."""
         # Create a folder for the release based on the ID and possibly a title
-        # (can also be done with the release_id as name)
         title = sanitize_filename(metadata.get('title', release_id))
         release_folder = self.library_path / f"{release_id}_{title}"
         release_folder.mkdir(parents=True, exist_ok=True)
 
-        # Save all metadata as JSON file
-        metadata_path = release_folder / "metadata.json"
-        with open(metadata_path, "w", encoding="utf-8") as f:
-            json.dump(metadata, f, indent=4, ensure_ascii=False)
-
-        # Also save to database (use temporary connection for thread safety)
+        # Save to database (use temporary connection for thread safety)
         try:
             with self._get_db_connection() as db:
                 metadata_with_folder = metadata.copy()
                 metadata_with_folder['release_folder'] = str(release_folder)
                 db.save_release(metadata_with_folder)
+            logger.success(f"Release {release_id} metadata saved to database")
         except Exception as e:
-            logger.warning(f"Failed to save release {release_id} to database: {e}")
-
-        logger.success(f"Release {release_id} metadata saved") 
+            logger.error(f"Failed to save release {release_id} to database: {e}")
+            raise 
         
 
     def delete_release_folder(self, release_id):
@@ -555,26 +530,12 @@ class DiscogsLibraryMirror:
             
             
     def sync_single_release(self, release_id, download_only=False, discogs_only=False):
-        # Check if metadata.json already exists to avoid unnecessary Discogs API calls
-        title_placeholder = str(release_id)  # Temporary title for folder detection
-        potential_folders = [f for f in self.library_path.iterdir() 
-                           if f.is_dir() and f.name.startswith(f"{release_id}_")]
-        
-        metadata = None
-        if potential_folders:
-            # Found existing folder - check for metadata.json
-            release_folder = potential_folders[0]
-            metadata_file = release_folder / "metadata.json"
-            if metadata_file.exists():
-                # Load existing metadata instead of calling Discogs API
-                try:
-                    with open(metadata_file, 'r', encoding='utf-8') as f:
-                        metadata = json.load(f)
-                    logger.debug(f"Using existing metadata for release {release_id} (avoiding Discogs API call)")
-                except Exception as e:
-                    logger.warning(f"Failed to load existing metadata for {release_id}, fetching from Discogs: {e}")
-                    metadata = None
-        
+        # Check if metadata exists in database to avoid unnecessary Discogs API calls
+        metadata = self.get_release_metadata(release_id)
+
+        if metadata:
+            logger.debug(f"Using existing metadata for release {release_id} (avoiding Discogs API call)")
+
         # Only call Discogs API if we don't have metadata
         if metadata is None:
             # Save new releases
@@ -707,18 +668,14 @@ class DiscogsLibraryMirror:
             all_success = True
             for release_folder in matching_folders:
                 logger.debug(f"Processing folder: {release_folder.name}")
-                
-                # Load existing metadata
-                metadata_file = release_folder / 'metadata.json'
-                if not metadata_file.exists():
-                    logger.error(f"No metadata.json found for release {release_id} at {metadata_file}")
+
+                # Load metadata from database
+                metadata = self.get_release_metadata(release_id)
+                if not metadata:
+                    logger.error(f"No metadata found in database for release {release_id}")
                     all_success = False
                     continue
-                
-                logger.debug(f"Loading metadata from: {metadata_file}")
-                with open(metadata_file, 'r', encoding='utf-8') as f:
-                    metadata = json.load(f)
-                
+
                 # Create new LaTeX label (overwrites existing)
                 logger.debug(f"Creating LaTeX label for: {metadata.get('title', 'Unknown')}")
                 result = create_latex_label_file(str(release_folder), metadata)
@@ -841,17 +798,14 @@ class DiscogsLibraryMirror:
                         continue
                     
                     self.release_folder = release_folder
-                    
-                    # Load metadata
-                    metadata_file = release_folder / 'metadata.json'
-                    if not metadata_file.exists():
-                        logger.warning(f"No metadata.json found for release {release_id}")
+
+                    # Load metadata from database
+                    metadata = self.get_release_metadata(release_id)
+                    if not metadata:
+                        logger.warning(f"No metadata found in database for release {release_id}")
                         pbar.update(1)
                         continue
-                    
-                    with open(metadata_file, 'r', encoding='utf-8') as f:
-                        metadata = json.load(f)
-                    
+
                     logger.debug(f"Processing offline: {release_id}")
                     
                     # 1. Audio analysis (if not already present)
@@ -952,15 +906,12 @@ class DiscogsLibraryMirror:
                 logger.error(f"Release folder not found for ID: {release_id}")
                 return False
             
-            # Load metadata for tracklist
-            metadata_file = release_folder / 'metadata.json'
-            if not metadata_file.exists():
-                logger.error(f"No metadata.json found for release {release_id}")
+            # Load metadata from database
+            metadata = self.get_release_metadata(release_id)
+            if not metadata:
+                logger.error(f"No metadata found in database for release {release_id}")
                 return False
-            
-            with open(metadata_file, 'r', encoding='utf-8') as f:
-                metadata = json.load(f)
-            
+
             # Find all audio files and regenerate waveforms
             from analyzeSoundFile import analyzeAudioFileOrStream
             
@@ -1083,15 +1034,12 @@ class DiscogsLibraryMirror:
                 logger.error(f"Release folder not found for ID: {release_id}")
                 return False
             
-            # Load metadata
-            metadata_file = release_folder / 'metadata.json'
-            if not metadata_file.exists():
-                logger.error(f"No metadata.json found for release {release_id}")
+            # Load metadata from database
+            metadata = self.get_release_metadata(release_id)
+            if not metadata:
+                logger.error(f"No metadata found in database for release {release_id}")
                 return False
-            
-            with open(metadata_file, 'r', encoding='utf-8') as f:
-                metadata = json.load(f)
-            
+
             logger.info(f"Processing release offline: {metadata.get('title', 'Unknown Title')}")
             
             # Set release folder for other methods
