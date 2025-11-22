@@ -5,7 +5,16 @@ import numpy as np
 from scipy.optimize import linear_sum_assignment
 import subprocess
 import librosa
-from analyzeSoundFile import analyzeAudioFileOrStream
+
+# Make audio analysis optional
+try:
+    from analyzeSoundFile import analyzeAudioFileOrStream, ESSENTIA_AVAILABLE
+except ImportError as e:
+    analyzeAudioFileOrStream = None
+    ESSENTIA_AVAILABLE = False
+    import warnings
+    warnings.warn(f"Audio analysis not available: {e}")
+
 from logger import logger
 import concurrent.futures
 import threading
@@ -16,23 +25,37 @@ def _analyze_track_standalone(task):
     """Standalone function for parallel track analysis"""
     import time
     import os
-    from analyzeSoundFile import analyzeAudioFileOrStream
+    try:
+        from analyzeSoundFile import analyzeAudioFileOrStream, ESSENTIA_AVAILABLE
+    except ImportError:
+        analyzeAudioFileOrStream = None
+        ESSENTIA_AVAILABLE = False
     from logger import logger
-    
+
     audio_file = task['audio_file']
     track_filename_base = task['track_filename_base']
     track_position = task['track_position']
     release_info = task.get('release_info', 'Unknown Release')
-    
+
+    # Skip if audio analysis not available
+    if not analyzeAudioFileOrStream:
+        logger.warning(f"[{release_info}] Skipping analysis for track {track_position} - audio analysis not available")
+        return {
+            'track': track_position,
+            'success': False,
+            'duration': 0,
+            'error': 'Audio analysis not available'
+        }
+
     try:
         start_time = time.time()
-        
+
         json_file = f"{track_filename_base}.json"
         waveform_file = f"{track_filename_base}_waveform.png"
-        
+
         analysis_needed = not os.path.exists(json_file)
         waveform_needed = not os.path.exists(waveform_file)
-        
+
         if not analysis_needed and not waveform_needed:
             logger.debug(f"[{release_info}] Track {track_position} already analyzed")
             return {
@@ -41,9 +64,9 @@ def _analyze_track_standalone(task):
                 'duration': 0,
                 'error': 'Already analyzed'
             }
-        
+
         analyzer = None
-        
+
         # Perform Essentia analysis (independent task)
         if analysis_needed:
             logger.process(f"[{release_info}] Running Essentia analysis for track {track_position}")
@@ -629,25 +652,30 @@ class YouTubeMatcher:
     
     def analyze_downloaded_track(self, track_filename_base, track_position):
         """Analyzes a downloaded track with Essentia"""
+        # Skip if audio analysis not available
+        if not analyzeAudioFileOrStream:
+            logger.debug(f"Skipping analysis for track {track_position} - audio analysis not available")
+            return True  # Return True to avoid blocking workflow
+
         try:
             # Find the actually downloaded file
             audio_file = self.get_downloaded_audio_file(track_filename_base)
-            
+
             if not audio_file:
                 logger.warning(f"No audio file found for track {track_position}")
                 return False
-            
+
             # Check which analyses are still missing
             json_file = f"{track_filename_base}.json"
             waveform_file = f"{track_filename_base}_waveform.png"
-            
+
             analysis_exists = os.path.exists(json_file)
             waveform_exists = os.path.exists(waveform_file)
-            
+
             if analysis_exists and waveform_exists:
                 logger.info(f"Audio analysis and waveform already exist for track {track_position}")
                 return True
-                
+
             # Show what still needs to be done
             todo_items = []
             if not analysis_exists:
@@ -655,16 +683,16 @@ class YouTubeMatcher:
             if not waveform_exists:
                 todo_items.append("waveform generation")
             logger.info(f"Running {', '.join(todo_items)} for track {track_position}")
-            
+
             # Wait briefly if file is still being written
             import time
             time.sleep(0.5)
-            
+
             # Check file size (should be > 0)
             if os.path.getsize(audio_file) == 0:
                 logger.error(f"Audio file is empty for track {track_position}: {audio_file}")
                 return False
-                
+
             # Create analyzer-Instanz
             analyzer = analyzeAudioFileOrStream(
                 fileOrStream=audio_file,

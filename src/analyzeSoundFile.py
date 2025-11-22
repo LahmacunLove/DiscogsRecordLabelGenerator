@@ -15,8 +15,18 @@ import shutil
 import subprocess
 import numpy as np
 # import keyfinder
-import essentia
-import essentia.standard as es
+
+# Make Essentia optional - gracefully handle if not available
+try:
+    import essentia
+    import essentia.standard as es
+    ESSENTIA_AVAILABLE = True
+except ImportError as e:
+    ESSENTIA_AVAILABLE = False
+    essentia = None
+    es = None
+    import warnings
+    warnings.warn(f"Essentia not available: {e}. Audio analysis features will be disabled.")
 
 from pylab import plot, show, figure, imshow
 # %matplotlib inline
@@ -44,6 +54,10 @@ class analyzeAudioFileOrStream:
         self.key = None
         
     def analyzeMusicExtractor(self):
+        if not ESSENTIA_AVAILABLE:
+            logger.warning("Essentia not available - skipping music analysis")
+            return None, None
+
         features, features_frames = es.MusicExtractor(lowlevelStats=['mean', 'stdev'],
                                                       rhythmStats=['mean', 'stdev'],
                                                       tonalStats=['mean', 'stdev'])(self.fileOrStream)
@@ -93,14 +107,20 @@ class analyzeAudioFileOrStream:
         # Check if file exists
         if not os.path.isfile(self.fileOrStream):
             raise FileNotFoundError(f"File not found: {self.fileOrStream}")
-        
+
         if self.debug:
             print(f"Loading file: {self.fileOrStream}")
-        
+
+        # Use ffmpeg if requested or if Essentia is not available
+        use_ffmpeg = ffmpegUsage or not ESSENTIA_AVAILABLE
+
         # Load audio
-        if ffmpegUsage and hasattr(self, 'ffmpeg_path') and self.ffmpeg_path is not None:
-            print("using ffmpeg")
-            
+        if use_ffmpeg and hasattr(self, 'ffmpeg_path') and self.ffmpeg_path is not None:
+            if not ESSENTIA_AVAILABLE:
+                print("Essentia not available - using ffmpeg for audio loading")
+            else:
+                print("using ffmpeg")
+
             ffmpeg_cmd = [
                 'ffmpeg',
                 '-i', self.fileOrStream,
@@ -112,21 +132,25 @@ class analyzeAudioFileOrStream:
                 '-loglevel', 'error',
                 '-'
             ]
-            
+
             # Start FFmpeg and read the audio stream
             process = subprocess.Popen(ffmpeg_cmd, stdout=subprocess.PIPE)
-            
+
             # Load raw audio data into NumPy array
             self.rawAudioStream = process.stdout.read()
             self.audioData = np.frombuffer(self.rawAudioStream, dtype=np.float32)
+            self.duration = len(self.audioData)/self.sampleRate if len(self.audioData) > 0 else 0
             # self.duration = librosa.get_duration(y=self.audioData, sr=self.sampleRate)
-            
+
         else:
+            if not ESSENTIA_AVAILABLE:
+                logger.error("Essentia not available and ffmpeg path not set - cannot load audio")
+                return
             loader = es.MonoLoader(filename=self.fileOrStream)
             self.audioData = loader()
             self.duration = len(self.audioData)/self.sampleRate
 
-        
+
         if self.debug:
             print(f"File loaded. Length: {self.duration:.2f} seconds")
 
