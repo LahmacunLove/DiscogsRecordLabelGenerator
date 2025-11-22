@@ -33,6 +33,18 @@ def show_statistics(db):
     logger.info(f"Total artists: {stats['total_artists']}")
     logger.info(f"Total labels: {stats['total_labels']}")
 
+    # Download progress
+    total = stats['total_releases']
+    if total > 0:
+        logger.info("\nDownload Progress:")
+        covers_pct = (stats['covers_downloaded'] / total) * 100
+        youtube_pct = (stats['youtube_matched'] / total) * 100
+        audio_pct = (stats['audio_downloaded'] / total) * 100
+
+        logger.info(f"  Covers:  {stats['covers_downloaded']}/{total} ({covers_pct:.1f}%)")
+        logger.info(f"  YouTube: {stats['youtube_matched']}/{total} ({youtube_pct:.1f}%)")
+        logger.info(f"  Audio:   {stats['audio_downloaded']}/{total} ({audio_pct:.1f}%)")
+
     if stats['by_decade']:
         logger.info("\nReleases by decade:")
         for decade, count in sorted(stats['by_decade'].items(), reverse=True):

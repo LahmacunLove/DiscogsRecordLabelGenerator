@@ -39,7 +39,7 @@ class DiscogsDatabase:
         """Create all database tables if they don't exist"""
         cursor = self.conn.cursor()
 
-        # Releases table - main release information
+        # Releases table - main release information (pure Discogs metadata)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS releases (
                 release_id INTEGER PRIMARY KEY,
@@ -49,6 +49,10 @@ class DiscogsDatabase:
                 formats TEXT,
                 release_folder TEXT,
                 videos TEXT,
+                discogs_synced_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                covers_downloaded BOOLEAN DEFAULT 0,
+                youtube_matched BOOLEAN DEFAULT 0,
+                audio_downloaded BOOLEAN DEFAULT 0,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
@@ -219,12 +223,13 @@ class DiscogsDatabase:
                 logger.error("No release_id found in metadata")
                 return False
 
-            # Insert or replace release
+            # Insert or replace release (Discogs metadata only)
+            now = datetime.now().isoformat()
             cursor.execute("""
                 INSERT OR REPLACE INTO releases (
                     release_id, title, year, timestamp, formats,
-                    release_folder, videos, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    release_folder, videos, discogs_synced_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 release_id,
                 metadata.get('title', ''),
@@ -233,7 +238,8 @@ class DiscogsDatabase:
                 json.dumps(metadata.get('formats', {})),
                 metadata.get('release_folder', ''),
                 json.dumps(metadata.get('videos', [])),
-                datetime.now().isoformat()
+                now,  # Mark when Discogs data was synced
+                now
             ))
 
             # Handle artists
@@ -447,6 +453,16 @@ class DiscogsDatabase:
         """)
         stats['by_decade'] = {f"{row[0]}s": row[1] for row in cursor.fetchall()}
 
+        # Download progress
+        cursor.execute("SELECT COUNT(*) FROM releases WHERE covers_downloaded = 1")
+        stats['covers_downloaded'] = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COUNT(*) FROM releases WHERE youtube_matched = 1")
+        stats['youtube_matched'] = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COUNT(*) FROM releases WHERE audio_downloaded = 1")
+        stats['audio_downloaded'] = cursor.fetchone()[0]
+
         return stats
 
     def save_youtube_matches(self, release_id: int, matches: List[Dict]) -> bool:
@@ -558,6 +574,81 @@ class DiscogsDatabase:
             logger.error(f"Failed to save audio analysis: {e}")
             self.conn.rollback()
             return False
+
+    def mark_covers_downloaded(self, release_id: int) -> bool:
+        """Mark that cover images have been downloaded for a release"""
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                UPDATE releases
+                SET covers_downloaded = 1, updated_at = ?
+                WHERE release_id = ?
+            """, (datetime.now().isoformat(), release_id))
+            self.conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to mark covers downloaded for {release_id}: {e}")
+            return False
+
+    def mark_youtube_matched(self, release_id: int) -> bool:
+        """Mark that YouTube videos have been matched for a release"""
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                UPDATE releases
+                SET youtube_matched = 1, updated_at = ?
+                WHERE release_id = ?
+            """, (datetime.now().isoformat(), release_id))
+            self.conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to mark YouTube matched for {release_id}: {e}")
+            return False
+
+    def mark_audio_downloaded(self, release_id: int) -> bool:
+        """Mark that audio files have been downloaded for a release"""
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                UPDATE releases
+                SET audio_downloaded = 1, updated_at = ?
+                WHERE release_id = ?
+            """, (datetime.now().isoformat(), release_id))
+            self.conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to mark audio downloaded for {release_id}: {e}")
+            return False
+
+    def get_releases_needing_covers(self) -> List[int]:
+        """Get release IDs that need cover downloads"""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT release_id FROM releases
+            WHERE covers_downloaded = 0
+            ORDER BY release_id
+        """)
+        return [row[0] for row in cursor.fetchall()]
+
+    def get_releases_needing_youtube(self) -> List[int]:
+        """Get release IDs that need YouTube matching"""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT release_id FROM releases
+            WHERE youtube_matched = 0
+            ORDER BY release_id
+        """)
+        return [row[0] for row in cursor.fetchall()]
+
+    def get_releases_needing_audio(self) -> List[int]:
+        """Get release IDs that need audio downloads"""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT release_id FROM releases
+            WHERE audio_downloaded = 0 AND youtube_matched = 1
+            ORDER BY release_id
+        """)
+        return [row[0] for row in cursor.fetchall()]
 
     def close(self):
         """Close database connection"""
